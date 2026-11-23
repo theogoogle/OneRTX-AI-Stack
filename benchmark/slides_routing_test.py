@@ -133,51 +133,26 @@ def test_tool_trimming_and_pptx_generation():
         assert req_tok in router.SLIDES_SCHEMA_PROMPT, f"SLIDES_SCHEMA_PROMPT missing {req_tok!r}"
 
 
-def test_option_a_search_freshness_and_option_b_bespoke_route():
-    # Option A: Tavily topic/time_range inference + RFC-2822 date formatting + for_slides context_block
-    opts_week = web_search.infer_search_options("Fais-moi un PowerPoint de 5 slides sur l'actualité IA de cette semaine")
-    assert opts_week == {"topic": "news", "time_range": "week"}, opts_week
-    opts_day = web_search.infer_search_options("What happened in AI news in the last 24h?")
-    assert opts_day == {"topic": "news", "time_range": "day"}, opts_day
-    opts_gen = web_search.infer_search_options("History of the Eiffel Tower")
-    assert opts_gen == {"topic": "general", "time_range": None}, opts_gen
-    assert web_search._format_pub_date("Fri, 20 Nov 2026 05:00:00 GMT") == "2026-11-20"
-    assert web_search._format_pub_date("2026-11-18T12:00:00Z") == "2026-11-18"
-
-    ctx = web_search.context_block(
-        "search",
-        [{"title": "Gemini 4 Neon Launch", "url": "https://example.com/neon", "content": "Details", "published": "Thu, 19 Nov 2026 10:00:00 GMT"}],
-        query="AI news November 2026",
-        images=[{"url": "https://example.com/hero.jpg", "description": "Source [1] — Gemini 4 Neon"}],
-        rich_citations=True,
-        for_slides=True,
-    )
-    assert "(published 2026-11-19)" in ctx
-    assert "Do NOT put bracketed citation numbers" in ctx
-    assert "VERIFIED PHOTOS FOR SLIDES" in ctx and "https://example.com/hero.jpg" in ctx
-    assert "photo://1" not in ctx
-
-    # Both Simple Deck and Advanced Deck stay in chat (never surprise-hijacked to OpenCode)
-    adv_tools = list(OWUI_TOOLS_BASE) + [
-        {"type": "function", "function": {"name": "build_advanced_deck", "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}}}}
-    ]
-    for msg in (
-        "Build me a bespoke agency-grade PowerPoint on Q4 AI trends with visual QA",
-        "Fais-moi un PowerPoint sur-mesure qualité agence avec vérification visuelle",
-    ):
-        rc = router.route_check(_body([{"role": "user", "content": msg}], tools=adv_tools))
-        assert rc["dispatch"] == "chat" and rc.get("tier") == "deep", f"Expected chat/deep: {msg!r} -> {rc}"
-
-    # When Advanced Deck is toggled on in + -> Tools, decide() routes straight to deep even on a bare topic prompt
-    tier_adv, reason_adv, forced_adv = router.decide(_body([{"role": "user", "content": "L'actualité IA de cette semaine"}], tools=adv_tools), "openai")
-    assert tier_adv == "deep" and forced_adv and "Advanced Deck" in reason_adv, (tier_adv, reason_adv, forced_adv)
-
-    # AST safety guard + env scrubbing + runtime sandbox inside advanced_deck.py
+def _load_advanced_deck_mod():
     sys.modules["open_webui"] = None
     adv_path = Path.home() / "AI" / "open-webui" / "tools" / "advanced_deck.py"
     spec_adv = importlib.util.spec_from_file_location("adv_deck_test", str(adv_path))
     mod_adv = importlib.util.module_from_spec(spec_adv)
     spec_adv.loader.exec_module(mod_adv)
+    return mod_adv
+
+
+def test_advanced_deck_sandbox_and_appcontainer():
+    """Offline AST guard, env scrubbing, SSRF block, audit-hook escape resistance, and Win32 AppContainer isolation."""
+    import os as _os
+    import zipfile as _zipfile
+    from unittest import mock as _mock
+
+    mod_adv = _load_advanced_deck_mod()
+    if _os.name == "nt":
+        import ctypes as _ct
+        assert _ct.sizeof(mod_adv._JOBOBJECT_EXTENDED_LIMIT_INFORMATION) == 144
+
     safe_code = (
         "import math\n"
         "import numpy as np\n"
@@ -217,9 +192,7 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
         assert mod_adv._audit_generated_code(bad_code), f"AST guard missed dangerous code: {bad_code}"
 
     # Env scrubbing strips Open WebUI / API secrets
-    import os as _os
-    from unittest import mock as _mock
-    with _mock.patch.dict(_os.environ, {"WEBUI_SECRET_KEY": "super-secret-jwt", "OPENAI_API_KEY": "sk-test-secret"}, clear=False):
+    with _mock.patch.dict(_os.environ, {"WEBUI_SECRET_KEY": "super-secret-jwt", "OPENAI_API_KEY": "demo-test-key"}, clear=False):
         with tempfile.TemporaryDirectory() as env_td:
             env_build = mod_adv._safe_subprocess_env(Path(env_td), include_userprofile=False)
             assert "WEBUI_SECRET_KEY" not in env_build and "OPENAI_API_KEY" not in env_build, env_build.keys()
@@ -245,17 +218,39 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
         )
         assert saved_photos == [], saved_photos
 
-    # Runtime sandbox: real deck_kit + matplotlib succeeds, hostile reads/subprocess/env fail
     py312 = mod_adv._find_py312()
     with tempfile.TemporaryDirectory() as sb_td:
         sb_dir = Path(sb_td)
+        # .venv pyvenv.cfg ACL resolution covers Scripts dir, .venv root (site-packages), and base Python home
+        fake_venv = sb_dir / "fake_venv"
+        (fake_venv / "Scripts").mkdir(parents=True)
+        fake_py = fake_venv / "Scripts" / "python.exe"
+        fake_py.write_bytes(b"")
+        fake_base = sb_dir / "fake_base"
+        fake_base.mkdir()
+        (fake_venv / "pyvenv.cfg").write_text(f"home = {fake_base}\ninclude-system-site-packages = false\n", encoding="utf-8")
+        acl_norms = {_os.path.normcase(str(p)) for p in mod_adv._resolve_py_acl_roots(str(fake_py))}
+        assert _os.path.normcase(str((fake_venv / "Scripts").resolve())) in acl_norms, acl_norms
+        assert _os.path.normcase(str(fake_venv.resolve())) in acl_norms, acl_norms
+        assert _os.path.normcase(str(fake_base.resolve())) in acl_norms, acl_norms
+
         outside_secret = sb_dir / "outside_secret.txt"
         outside_secret.write_text("TOP_SECRET_VALUE", encoding="utf-8")
+        outside_trunc = sb_dir / "outside_trunc.txt"
+        outside_trunc.write_text("KEEP_INTACT", encoding="utf-8")
+
         work_ok = sb_dir / "work_ok"
         work_ok.mkdir()
         ok_script = work_ok / "build_deck.py"
         ok_script.write_text(safe_code, encoding="utf-8")
         with _mock.patch.dict(_os.environ, {"WEBUI_SECRET_KEY": "super-secret-jwt"}, clear=False):
+            # Non-Windows hosts must fail closed unless ALLOW_UNCONTAINED_DECK_EXEC=1
+            clean_env = {k: v for k, v in _os.environ.items() if k != "ALLOW_UNCONTAINED_DECK_EXEC"}
+            with _mock.patch.dict(_os.environ, clean_env, clear=True):
+                with _mock.patch.object(mod_adv.os, "name", "posix"):
+                    ok_nw, msg_nw = mod_adv._run_build_script(py312, work_ok, ok_script)
+                    assert not ok_nw and "Win32 AppContainer isolation is required" in msg_nw, msg_nw
+
             ok_run, msg_ok = mod_adv._run_build_script(py312, work_ok, ok_script)
             assert ok_run, f"Sandboxed deck build failed: {msg_ok}"
             assert (work_ok / "deck.pptx").stat().st_size > 5000
@@ -281,7 +276,6 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
             ok_e3, msg_e3 = mod_adv._run_build_script(py312, work_evil_sub, evil_sub)
             assert not ok_e3 and ("PermissionError" in msg_e3 or "Blocked by Advanced Deck sandbox" in msg_e3), msg_e3
 
-            # Verify ctypes.* audit block, sys.path work_dir removal, and .py/.pth write block
             work_evil_ctypes = sb_dir / "work_evil_ctypes"
             work_evil_ctypes.mkdir()
             evil_ctypes = work_evil_ctypes / "build_deck.py"
@@ -289,13 +283,48 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
             ok_e4, msg_e4 = mod_adv._run_build_script(py312, work_evil_ctypes, evil_ctypes)
             assert not ok_e4 and ("PermissionError" in msg_e4 or "Blocked by Advanced Deck sandbox" in msg_e4), msg_e4
 
-            for ext_name in ("evil.py", "evil.pth"):
+            for ext_name in ("evil.py", "evil.pth", "evil.zip"):
                 work_evil_ext = sb_dir / f"work_evil_{ext_name.replace('.', '_')}"
                 work_evil_ext.mkdir()
                 evil_ext = work_evil_ext / "build_deck.py"
                 evil_ext.write_text(f"open({ext_name!r}, 'w').write('x')\n", encoding="utf-8")
                 ok_e5, msg_e5 = mod_adv._run_build_script(py312, work_evil_ext, evil_ext)
                 assert not ok_e5 and ("PermissionError" in msg_e5 or "Blocked writing executable/code" in msg_e5), msg_e5
+
+            # Previously uncaught Python audit-hook escapes: os.link, os.truncate, socket.sendto, zipimport + sys.path
+            work_link = sb_dir / "work_evil_link"
+            work_link.mkdir()
+            s_link = work_link / "build_deck.py"
+            s_link.write_text(f"import matplotlib\nmatplotlib.os.link({str(outside_secret)!r}, 'leak.txt')\n", encoding="utf-8")
+            ok_lk, msg_lk = mod_adv._run_build_script(py312, work_link, s_link)
+            assert not ok_lk and ("PermissionError" in msg_lk or "Blocked" in msg_lk) and not (work_link / "leak.txt").exists(), msg_lk
+
+            work_trunc = sb_dir / "work_evil_trunc"
+            work_trunc.mkdir()
+            s_trunc = work_trunc / "build_deck.py"
+            s_trunc.write_text(f"import matplotlib\nmatplotlib.os.truncate({str(outside_trunc)!r}, 0)\n", encoding="utf-8")
+            ok_tr, msg_tr = mod_adv._run_build_script(py312, work_trunc, s_trunc)
+            assert not ok_tr and ("PermissionError" in msg_tr or "Blocked" in msg_tr), msg_tr
+            assert outside_trunc.read_text(encoding="utf-8") == "KEEP_INTACT"
+
+            work_sock = sb_dir / "work_evil_sock"
+            work_sock.mkdir()
+            s_sock = work_sock / "build_deck.py"
+            s_sock.write_text(
+                "import matplotlib\ns = matplotlib.sys.modules['socket'].socket(2, 2)\ns.sendto(b'hi', ('127.0.0.1', 9))\n",
+                encoding="utf-8",
+            )
+            ok_sk, msg_sk = mod_adv._run_build_script(py312, work_sock, s_sock)
+            assert not ok_sk and ("PermissionError" in msg_sk or "Blocked" in msg_sk), msg_sk
+
+            work_zip = sb_dir / "work_evil_zipimport"
+            work_zip.mkdir()
+            with _zipfile.ZipFile(work_zip / "mod.zip", "w") as zf:
+                zf.writestr("colorsys.py", "raise RuntimeError('ZIPIMPORT_RAN')\n")
+            s_zip = work_zip / "build_deck.py"
+            s_zip.write_text("import matplotlib\nmatplotlib.sys.path.insert(0, 'mod.zip')\nimport colorsys\n", encoding="utf-8")
+            ok_zp, msg_zp = mod_adv._run_build_script(py312, work_zip, s_zip)
+            assert not ok_zp and "ZIPIMPORT_RAN" not in msg_zp and ("PermissionError" in msg_zp or "Blocked" in msg_zp), msg_zp
 
             work_syspath = sb_dir / "work_syspath"
             work_syspath.mkdir()
@@ -311,11 +340,14 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
 
             # Pure OS-level Win32 AppContainer kernel boundary tests (NO Python audit hooks installed!)
             if _os.name == "nt":
+                import ctypes as _ct
+                import ctypes.wintypes as _wt
+                import time as _time
+
                 work_ac = sb_dir / "work_ac_kernel"
                 work_ac.mkdir()
                 outside_write = sb_dir / "outside_write.txt"
                 ac_env = mod_adv._safe_subprocess_env(work_ac, include_userprofile=False)
-                # 1. Raw Win32 CreateFileW read of outside secret -> ACCESS_DENIED (5)
                 ac_payload = (
                     "import ctypes, os, socket\n"
                     "from pathlib import Path\n"
@@ -349,6 +381,118 @@ def test_option_a_search_freshness_and_option_b_bespoke_route():
                 assert rc_ac == 0 and "APPCONTAINER_KERNEL_OK" in out_ac, f"rc={rc_ac} out={out_ac!r} err={err_ac!r}"
                 assert (work_ac / "inside_ok.txt").read_text(encoding="utf-8") == "ok"
                 assert not outside_write.exists()
+
+                # Verify PROC_THREAD_ATTRIBUTE_HANDLE_LIST blocks inheritable parent handles
+                sentinel = sb_dir / "inherited_sentinel.txt"
+                sentinel.write_bytes(b"LEAKED_VIA_HANDLE_INHERITANCE")
+                k32 = _ct.WinDLL("kernel32", use_last_error=True)
+                sa_inh = mod_adv._SECURITY_ATTRIBUTES(_ct.sizeof(mod_adv._SECURITY_ATTRIBUTES), None, True)
+                k32.CreateFileW.argtypes = [_wt.LPCWSTR, _wt.DWORD, _wt.DWORD, _ct.c_void_p, _wt.DWORD, _wt.DWORD, _wt.HANDLE]
+                k32.CreateFileW.restype = _wt.HANDLE
+                k32.CloseHandle.argtypes = [_wt.HANDLE]
+                k32.CloseHandle.restype = _wt.BOOL
+                h_leak = k32.CreateFileW(str(sentinel), 0x80000000, 3, _ct.byref(sa_inh), 3, 0x80, None)
+                assert h_leak and h_leak != _ct.c_void_p(-1).value
+                try:
+                    handle_payload = (
+                        "import ctypes, ctypes.wintypes as wt\n"
+                        "k32 = ctypes.WinDLL('kernel32', use_last_error=True)\n"
+                        "k32.ReadFile.argtypes = [wt.HANDLE, ctypes.c_void_p, wt.DWORD, ctypes.POINTER(wt.DWORD), ctypes.c_void_p]\n"
+                        "k32.ReadFile.restype = wt.BOOL\n"
+                        "buf = (ctypes.c_char * 64)()\n"
+                        "nread = wt.DWORD(0)\n"
+                        "try:\n"
+                        f"    ok = k32.ReadFile(wt.HANDLE({int(h_leak)}), buf, 64, ctypes.byref(nread), None)\n"
+                        "    err = ctypes.get_last_error()\n"
+                        "    data = bytes(buf[:nread.value])\n"
+                        "    assert b'LEAKED_VIA_HANDLE_INHERITANCE' not in data, f'Leaked handle data: {data!r}'\n"
+                        "    assert not ok and err in (6, 5, 1, 87, 109), f'Expected failed ReadFile on blocked handle, got ok={ok} err={err}'\n"
+                        "except OSError as exc:\n"
+                        "    assert getattr(exc, 'winerror', None) in (-1073741816, 6, 5, 1, 87, 109), repr(exc)\n"
+                        "print('HANDLE_INHERITANCE_BLOCKED')\n"
+                    )
+                    rc_hl, out_hl, err_hl = mod_adv._run_in_appcontainer(
+                        [py312, "-I", "-X", "utf8", "-c", handle_payload], work_ac, ac_env, timeout=20
+                    )
+                    assert rc_hl == 0 and "HANDLE_INHERITANCE_BLOCKED" in out_hl, f"rc={rc_hl} out={out_hl!r} err={err_hl!r}"
+                finally:
+                    k32.CloseHandle(h_leak)
+
+                # Verify JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE + TerminateJobObject kills grandchildren on timeout
+                work_job = sb_dir / "work_ac_job"
+                work_job.mkdir()
+                job_env = mod_adv._safe_subprocess_env(work_job, include_userprofile=False)
+                job_payload = (
+                    "import os, subprocess, sys, time\n"
+                    "gc_code = \"import os, pathlib, time; pathlib.Path('grandchild_pid.txt').write_text(str(os.getpid())); time.sleep(30)\"\n"
+                    "p = subprocess.Popen([sys.executable, '-I', '-c', gc_code])\n"
+                    "for _ in range(40):\n"
+                    "    if os.path.exists('grandchild_pid.txt'): break\n"
+                    "    time.sleep(0.05)\n"
+                    "time.sleep(30)\n"
+                )
+                rc_jb, out_jb, err_jb = mod_adv._run_in_appcontainer(
+                    [py312, "-I", "-X", "utf8", "-c", job_payload], work_job, job_env, timeout=3
+                )
+                assert rc_jb == 124, f"Expected timeout 124, got {rc_jb} err={err_jb!r}"
+                gpid_file = work_job / "grandchild_pid.txt"
+                assert gpid_file.is_file(), "Grandchild never wrote PID before timeout"
+                gpid = int(gpid_file.read_text(encoding="utf-8").strip())
+                k32.OpenProcess.argtypes = [_wt.DWORD, _wt.BOOL, _wt.DWORD]
+                k32.OpenProcess.restype = _wt.HANDLE
+                k32.GetExitCodeProcess.argtypes = [_wt.HANDLE, _ct.POINTER(_wt.DWORD)]
+                k32.GetExitCodeProcess.restype = _wt.BOOL
+                _time.sleep(0.25)
+                h_gp = k32.OpenProcess(0x1000, False, gpid)
+                if h_gp:
+                    try:
+                        ex = _wt.DWORD(0)
+                        assert k32.GetExitCodeProcess(h_gp, _ct.byref(ex)) and ex.value != 259, f"Grandchild {gpid} STILL_ACTIVE after Job kill!"
+                    finally:
+                        k32.CloseHandle(h_gp)
+
+
+def test_option_a_search_freshness_and_option_b_bespoke_route():
+    # Option A: Tavily topic/time_range inference + RFC-2822 date formatting + for_slides context_block
+    opts_week = web_search.infer_search_options("Fais-moi un PowerPoint de 5 slides sur l'actualité IA de cette semaine")
+    assert opts_week == {"topic": "news", "time_range": "week"}, opts_week
+    opts_day = web_search.infer_search_options("What happened in AI news in the last 24h?")
+    assert opts_day == {"topic": "news", "time_range": "day"}, opts_day
+    opts_gen = web_search.infer_search_options("History of the Eiffel Tower")
+    assert opts_gen == {"topic": "general", "time_range": None}, opts_gen
+    assert web_search._format_pub_date("Fri, 20 Nov 2026 05:00:00 GMT") == "2026-11-20"
+    assert web_search._format_pub_date("2026-11-18T12:00:00Z") == "2026-11-18"
+
+    ctx = web_search.context_block(
+        "search",
+        [{"title": "Gemini 4 Neon Launch", "url": "https://example.com/neon", "content": "Details", "published": "Thu, 19 Nov 2026 10:00:00 GMT"}],
+        query="AI news November 2026",
+        images=[{"url": "https://example.com/hero.jpg", "description": "Source [1] — Gemini 4 Neon"}],
+        rich_citations=True,
+        for_slides=True,
+    )
+    assert "(published 2026-11-19)" in ctx
+    assert "Do NOT put bracketed citation numbers" in ctx
+    assert "VERIFIED PHOTOS FOR SLIDES" in ctx and "https://example.com/hero.jpg" in ctx
+    assert "photo://1" not in ctx
+
+    # Both Simple Deck and Advanced Deck stay in chat (never surprise-hijacked to OpenCode)
+    adv_tools = list(OWUI_TOOLS_BASE) + [
+        {"type": "function", "function": {"name": "build_advanced_deck", "parameters": {"type": "object", "properties": {"topic": {"type": "string"}}}}}
+    ]
+    for msg in (
+        "Build me a bespoke agency-grade PowerPoint on Q4 AI trends with visual QA",
+        "Fais-moi un PowerPoint sur-mesure qualité agence avec vérification visuelle",
+    ):
+        rc = router.route_check(_body([{"role": "user", "content": msg}], tools=adv_tools))
+        assert rc["dispatch"] == "chat" and rc.get("tier") == "deep", f"Expected chat/deep: {msg!r} -> {rc}"
+
+    # When Advanced Deck is toggled on in + -> Tools, decide() routes straight to deep even on a bare topic prompt
+    tier_adv, reason_adv, forced_adv = router.decide(_body([{"role": "user", "content": "L'actualité IA de cette semaine"}], tools=adv_tools), "openai")
+    assert tier_adv == "deep" and forced_adv and "Advanced Deck" in reason_adv, (tier_adv, reason_adv, forced_adv)
+
+    mod_adv = _load_advanced_deck_mod()
+    test_advanced_deck_sandbox_and_appcontainer()
 
     # Deterministic 16:9 widescreen injection + import sanitizer + surgical SEARCH/REPLACE patcher (incl. delete)
     ws_fixed = mod_adv._ensure_widescreen_code(
@@ -394,6 +538,8 @@ if __name__ == "__main__":
     print("PASS: test_intent_negatives (8/8)")
     test_tool_trimming_and_pptx_generation()
     print("PASS: test_tool_trimming_and_pptx_generation")
+    test_advanced_deck_sandbox_and_appcontainer()
+    print("PASS: test_advanced_deck_sandbox_and_appcontainer")
     test_option_a_search_freshness_and_option_b_bespoke_route()
     print("PASS: test_option_a_search_freshness_and_option_b_bespoke_route")
     print("ALL SLIDES TESTS PASSED")

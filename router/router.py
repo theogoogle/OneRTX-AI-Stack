@@ -178,6 +178,7 @@ MODEL_STATE_TTL_S = 3
 
 LOG_FILE = Path(__file__).with_name("router.log")
 LOG_MAX_BYTES = 2_000_000
+SAVE_LAST_REQUEST = os.environ.get("ROUTER_DEBUG_SAVE_REQUESTS", "0") == "1"
 
 DEEP_PHRASES = re.compile(r"\b(ultrathink|think (really |very )hard|think harder)\b", re.I)
 THINK_PHRASES = re.compile(r"\b(think hard|think deeply|think carefully|think step by step|r[ée]fl[ée]chis|pas [àa] pas)\b", re.I)
@@ -4419,10 +4420,11 @@ class Handler(BaseHTTPRequestHandler):
         entry.pop("_owui_stream", None)
         entry.pop("_owui_selected_model", None)
         entry.pop("_owui_loading_status", None)
-        try:   # keep the last forwarded request per tier, for debugging (overwritten each time)
-            LOG_FILE.with_name(f"last_request_{entry.get('tier', 'x')}.json").write_bytes(payload)
-        except OSError:
-            pass
+        if SAVE_LAST_REQUEST:
+            try:   # keep the last forwarded request per tier, for debugging (overwritten each time)
+                LOG_FILE.with_name(f"last_request_{entry.get('tier', 'x')}.json").write_bytes(payload)
+            except OSError:
+                pass
         entry.update(time=time.strftime("%H:%M:%S"), stream=bool(body.get("stream")), status=status,
                      seconds=round(time.time() - started, 1), request_kb=len(payload) // 1024)
         _recent.append(entry)

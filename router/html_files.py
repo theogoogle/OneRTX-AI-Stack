@@ -23,6 +23,7 @@ from urllib.parse import parse_qs, quote, unquote
 
 GENERATED_DIR = Path.home() / "AI" / "generated"
 FILES_HOST, FILES_PORT = "127.0.0.1", int(os.environ.get("HTML_FILES_PORT", "4001"))
+ALLOW_INDEX = os.environ.get("HTML_FILES_ALLOW_INDEX", "0") == "1"
 TAILNET_HTTPS_PORT = 8443
 TAILNET_HOSTNAME = "<pc-name>.<tailnet>.ts.net"     # the name `tailscale serve` forwards for the phone link
 PLAYWRIGHT = Path.home() / "AI" / "playwright-mcp" / "node_modules" / "playwright"
@@ -322,7 +323,11 @@ class _Files(BaseHTTPRequestHandler):
         path_part, _, query = self.path.partition("?")
         rel = unquote(path_part).lstrip("/")
         if rel in ("", "index.html"):
-            return self._index()
+            host_hdr = (self.headers.get("Host") or "").split(":", 1)[0].strip().lower()
+            if ALLOW_INDEX and host_hdr in ("127.0.0.1", "localhost"):
+                return self._index()
+            self.send_error(404)
+            return
         try:
             path = (GENERATED_DIR / rel).resolve()
             ctype = SERVED_MEDIA_TYPES.get(path.suffix.lower())

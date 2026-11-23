@@ -193,6 +193,140 @@ print("smart_router_core_ok")
     assert r.returncode == 0, f"Core unit checks failed:\n{r.stdout}\n{r.stderr}"
     print("[PASS] tier1_upgrades + smart_router_unit core checks")
 
+    # 3. Advanced Deck sandbox / AppContainer, sanitized PDF export & security hardening checks
+    owui_py = install_dir / "AI" / "open-webui" / ".venv" / "Scripts" / "python.exe"
+    sec_py = str(owui_py) if owui_py.is_file() else sys.executable
+    sec_code = r"""
+import importlib.util, os, sys, tempfile, threading, types
+import http.client
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from unittest import mock
+
+home = Path(os.environ["USERPROFILE"])
+repo_root = Path(os.environ["REPO_ROOT"])
+sys.path.insert(0, os.environ["BENCH_DIR"])
+sys.path.insert(0, os.environ["SCRIPTS_DIR"])
+sys.path.insert(0, str(home / "AI" / "doc-export"))
+sys.path.insert(0, str(home / "AI" / "open-webui"))
+
+import router
+assert router.SAVE_LAST_REQUEST is False, f"Expected SAVE_LAST_REQUEST=False, got {router.SAVE_LAST_REQUEST}"
+
+import setup_backup
+scrubbed = setup_backup._scrub_value(
+    {
+        "apiKey": "plain-secret-val",
+        "prefixedKey": "sk-" + "demo" * 6,
+        "nested": {"clientSecret": "my-client-sec", "okField": "visible"},
+    },
+    ot_secret="ot-secret-123",
+)
+assert scrubbed["apiKey"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["prefixedKey"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["nested"]["clientSecret"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["nested"]["okField"] == "visible", scrubbed
+
+import html_files
+srv = ThreadingHTTPServer(("127.0.0.1", 0), html_files._Files)
+port = srv.server_address[1]
+t = threading.Thread(target=srv.serve_forever, daemon=True)
+t.start()
+try:
+    for pth in ("/", "/index.html"):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("GET", pth, headers={"Host": f"127.0.0.1:{port}"})
+        st = c.getresponse().status
+        c.close()
+        assert st == 404, f"Expected 404 for {pth}, got {st}"
+finally:
+    srv.shutdown()
+    srv.server_close()
+
+vt_dir = home / "AI" / "voice-tts"
+if not (vt_dir / "server.py").is_file():
+    vt_dir = repo_root / "voice-tts"
+if (vt_dir / "server.py").is_file():
+    sys.path.insert(0, str(vt_dir))
+    spec_vt = importlib.util.spec_from_file_location("vt_sec_test", str(vt_dir / "server.py"))
+    mod_vt = importlib.util.module_from_spec(spec_vt)
+    spec_vt.loader.exec_module(mod_vt)
+    with tempfile.TemporaryDirectory() as vtd:
+        vroot = Path(vtd) / "voices"
+        vroot.mkdir()
+        valid_wav = vroot / "sample.wav"
+        valid_wav.write_bytes(b"RIFFdemo")
+        (vroot / "sample.txt").write_text("hello voice", encoding="utf-8")
+        outside_wav = Path(vtd) / "outside.wav"
+        outside_wav.write_bytes(b"RIFFbad")
+        with mock.patch.object(mod_vt, "VOICES_DIR", vroot):
+            wp, wtxt, wname = mod_vt.resolve_voice("en", ref_audio_override="sample.wav")
+            assert Path(wp).resolve() == valid_wav.resolve() and wtxt == "hello voice" and wname == "sample"
+            for bad_ref in (str(outside_wav), "..\\outside.wav"):
+                try:
+                    mod_vt.resolve_voice("en", ref_audio_override=bad_ref)
+                    raise AssertionError(f"Expected ValueError for outside ref_audio: {bad_ref}")
+                except ValueError:
+                    pass
+
+gwc_dir = home / "AI" / "family-table"
+if not (gwc_dir / "google_workspace_cli.py").is_file():
+    gwc_dir = repo_root / "family-table"
+if (gwc_dir / "google_workspace_cli.py").is_file():
+    sys.path.insert(0, str(gwc_dir))
+    injected = {}
+    try:
+        import googleapiclient.discovery  # noqa: F401
+    except ImportError:
+        for mod_name in ("googleapiclient", "googleapiclient.discovery", "google_connector"):
+            if mod_name not in sys.modules:
+                m = types.ModuleType(mod_name)
+                if mod_name == "googleapiclient.discovery":
+                    m.build = lambda *a, **kw: None
+                if mod_name == "google_connector":
+                    m._strip_html = lambda s: str(s or "")
+                sys.modules[mod_name] = m
+                injected[mod_name] = None
+    try:
+        spec_gwc = importlib.util.spec_from_file_location("gwc_sec_test", str(gwc_dir / "google_workspace_cli.py"))
+        mod_gwc = importlib.util.module_from_spec(spec_gwc)
+        spec_gwc.loader.exec_module(mod_gwc)
+    finally:
+        for mod_name in injected:
+            sys.modules.pop(mod_name, None)
+
+    class _FakeExec:
+        def __init__(self, items): self._items = items
+        def execute(self): return {"items": self._items}
+    class _FakeEvents:
+        def __init__(self, items): self._items = items
+        def list(self, **kw): return _FakeExec(self._items)
+    class _FakeSvc:
+        def __init__(self, items): self._items = items
+        def events(self): return _FakeEvents(self._items)
+    fake_items = [
+        {"summary": "Private Appointment", "visibility": "private", "start": {"dateTime": "2026-11-24T09:00:00Z"}},
+        {"summary": "Confidential Job Interview", "visibility": "default", "start": {"dateTime": "2026-11-24T11:00:00Z"}},
+        {"summary": "Parent Teacher Meeting", "visibility": "default", "start": {"dateTime": "2026-11-24T15:30:00Z"}},
+    ]
+    fake_cfg = {"calendars": {"include": [{"id": "primary", "label": "Primary"}], "exclude_private_visibility": True, "exclude_title_regex": ["interview"]}}
+    with mock.patch.object(mod_gwc, "build", lambda *a, **kw: _FakeSvc(fake_items)):
+        res_ev = mod_gwc._cmd_events(None, fake_cfg, 7, "", "")
+    assert [e["summary"] for e in res_ev["events"]] == ["Parent Teacher Meeting"], res_ev
+
+import slides_routing_test as srt
+srt.test_advanced_deck_sandbox_and_appcontainer()
+print("slides_appcontainer_ok")
+
+import owui_power_tools_test as opt
+opt.test_doc_export()
+print("doc_export_ok")
+"""
+    sec_env = {**env, "BENCH_DIR": str(bench_dir), "SCRIPTS_DIR": str(scripts_dir), "REPO_ROOT": str(Path(__file__).resolve().parent)}
+    r2 = subprocess.run([sec_py, "-I", "-X", "utf8", "-c", sec_code], env=sec_env, capture_output=True, text=True, check=False)
+    assert r2.returncode == 0, f"Security & AppContainer checks failed:\n{r2.stdout}\n{r2.stderr}"
+    print("[PASS] slides_routing_test AppContainer + doc-export + security hardening checks")
+
 
 def http_req(port: int, method: str, path: str, body: dict | None = None, headers: dict | None = None):
     conn = http.client.HTTPConnection("127.0.0.1", port, timeout=20)

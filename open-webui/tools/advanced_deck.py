@@ -192,11 +192,62 @@ Rules:
 """
 
 
+_DECK_LIBS_CACHE: dict[str, bool] = {}
+
+
+def _has_deck_libs(py_exe: str) -> bool:
+    """Return True if `py_exe` can import `pptx` and `matplotlib` in isolated (-I) mode."""
+    norm = os.path.normcase(os.path.realpath(py_exe))
+    cached = _DECK_LIBS_CACHE.get(norm)
+    if cached is not None:
+        return cached
+    try:
+        kwargs: dict[str, Any] = {
+            "capture_output": True,
+            "text": True,
+            "timeout": 10,
+            "check": False,
+        }
+        if os.name == "nt":
+            kwargs["creationflags"] = 0x08000000  # CREATE_NO_WINDOW
+        r = subprocess.run([py_exe, "-I", "-c", "import pptx, matplotlib"], **kwargs)
+        ok = r.returncode == 0
+    except Exception:
+        ok = False
+    _DECK_LIBS_CACHE[norm] = ok
+    return ok
+
+
 def _find_py312() -> str:
+    candidates: list[str] = []
     cand = Path.home() / "AppData" / "Local" / "Programs" / "Python" / "Python312" / "python.exe"
     if cand.is_file():
-        return str(cand)
+        candidates.append(str(cand))
     found = shutil.which("python")
+    if found and Path(found).is_file():
+        candidates.append(found)
+    if sys.executable and Path(sys.executable).is_file():
+        candidates.append(sys.executable)
+    owui_venv_py = Path.home() / "AI" / "open-webui" / ".venv" / "Scripts" / "python.exe"
+    if owui_venv_py.is_file():
+        candidates.append(str(owui_venv_py))
+    prefix_py = Path(sys.prefix) / "Scripts" / "python.exe"
+    if prefix_py.is_file():
+        candidates.append(str(prefix_py))
+
+    dedup: list[str] = []
+    seen: set[str] = set()
+    for p in candidates:
+        k = os.path.normcase(os.path.realpath(p))
+        if k not in seen:
+            seen.add(k)
+            dedup.append(p)
+
+    for p in dedup:
+        if _has_deck_libs(p):
+            return p
+    if cand.is_file():
+        return str(cand)
     if found and ".venv" not in found.lower():
         return found
     return sys.executable
@@ -769,8 +820,19 @@ def _is_under(path_str, roots):
             continue
     return False
 
-# Drop work_dir / CWD from import path now that deck_kit is loaded
+# Drop work_dir / CWD from import path and disable zipimport now that deck_kit is loaded
 sys.path = [p for p in sys.path if p not in ("", ".") and not _is_under(p, (work_real,))]
+try:
+    import zipimport
+    sys.path_hooks = [
+        h for h in sys.path_hooks
+        if h is not zipimport.zipimporter
+        and "zipimporter" not in getattr(h, "__name__", "").lower()
+        and "zipimport" not in getattr(h, "__module__", "").lower()
+    ]
+except Exception:
+    pass
+sys.path_importer_cache.clear()
 
 def _resolve_arg(p):
     if p in (None, "", "."):
@@ -782,7 +844,8 @@ def _resolve_arg(p):
 
 _WRITE_MASK = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | getattr(os, "O_APPEND", 0)
 _FORBIDDEN_WRITE_EXTS = frozenset({
-    ".py", ".pyc", ".pyo", ".pyw", ".pth", ".pyd", ".dll",
+    ".py", ".pyc", ".pyo", ".pyw", ".pth", ".pyd", ".dll", ".so",
+    ".zip", ".whl", ".egg",
     ".exe", ".bat", ".cmd", ".ps1", ".vbs", ".js",
 })
 _BLOCKED_EVENTS = frozenset({
@@ -791,17 +854,78 @@ _BLOCKED_EVENTS = frozenset({
     "os.startfile",
     "os.posix_spawn",
     "os.kill",
-    "socket.connect",
-    "socket.bind",
-    "socket.getaddrinfo",
+    "os.link",
+    "os.symlink",
+    "os.truncate",
+    "os.ftruncate",
+    "os.chmod",
+    "os.fchmod",
+    "os.chown",
+    "os.lchown",
+    "os.fchown",
+    "os.chflags",
+    "os.lchflags",
+    "os.utime",
+    "os.chdir",
+    "os.fchdir",
+    "os.chroot",
+    "os.putenv",
+    "os.unsetenv",
     "urllib.Request",
     "http.client.connect",
+    "http.client.send",
     "webbrowser.open",
+    "ftplib.connect",
+    "ftplib.sendcmd",
+    "smtplib.connect",
+    "poplib.connect",
+    "imaplib.open",
 })
 
+source_text = script_path.read_text(encoding="utf-8")
+_main_code = compile(source_text, str(script_path), "exec")
+
 def _audit_hook(event, args):
-    if event in _BLOCKED_EVENTS or event.startswith(("os.spawn", "os.exec", "winreg.", "ctypes.")):
+    if event in _BLOCKED_EVENTS or event.startswith(("os.spawn", "os.exec", "winreg.", "ctypes.", "socket.", "shutil.")):
         raise PermissionError(f"Blocked by Advanced Deck sandbox: {event}")
+    if event == "import":
+        mod_name = str(args[0] or "") if args else ""
+        if mod_name == "zipimport" or mod_name.startswith("zipimport."):
+            raise PermissionError("Blocked zipimport inside deck sandbox")
+        fn_arg = args[1] if len(args) > 1 else None
+        if isinstance(fn_arg, (str, bytes, os.PathLike)):
+            resolved_fn = _resolve_arg(fn_arg)
+            if _is_under(resolved_fn, (work_real,)) or (
+                resolved_fn.lower().endswith((".zip", ".whl", ".egg")) and not _is_under(resolved_fn, ro_roots)
+            ):
+                raise PermissionError(f"Blocked workspace import file: {resolved_fn}")
+        sp_arg = args[2] if len(args) > 2 else None
+        if isinstance(sp_arg, (list, tuple)):
+            for sp_entry in sp_arg:
+                if sp_entry in ("", "."):
+                    raise PermissionError("Blocked CWD import path inside deck sandbox")
+                if isinstance(sp_entry, (str, bytes, os.PathLike)):
+                    sp_str = os.fsdecode(sp_entry) if isinstance(sp_entry, (bytes, os.PathLike)) else str(sp_entry)
+                    resolved_sp = _resolve_arg(sp_str)
+                    if _is_under(resolved_sp, (work_real,)) or (
+                        sp_str.lower().endswith((".zip", ".whl", ".egg")) and not _is_under(resolved_sp, ro_roots)
+                    ):
+                        raise PermissionError(f"Blocked workspace sys.path import: {sp_str}")
+        hooks_arg = args[4] if len(args) > 4 else None
+        if isinstance(hooks_arg, (list, tuple)):
+            for hk in hooks_arg:
+                if "zipimporter" in getattr(hk, "__name__", "").lower() or "zipimport" in getattr(hk, "__module__", "").lower():
+                    raise PermissionError("Blocked zipimporter hook inside deck sandbox")
+        return
+    if event == "exec":
+        code_obj = args[0] if args else None
+        if code_obj is not _main_code:
+            cf = getattr(code_obj, "co_filename", "") or ""
+            if cf and not (cf.startswith("<") and cf.endswith(">")):
+                resolved_cf = _resolve_arg(cf)
+                if _is_under(resolved_cf, (work_real,)):
+                    raise PermissionError(f"Blocked secondary exec inside deck workspace: {resolved_cf}")
+        return
     if event == "open":
         path_arg, mode_arg, flags_arg = args[0], args[1], args[2]
         if isinstance(path_arg, int):
@@ -816,7 +940,7 @@ def _audit_hook(event, args):
             return
         if is_write or not _is_under(resolved, ro_roots):
             raise PermissionError(f"Blocked file access outside deck workspace: {resolved}")
-    elif event in ("os.listdir", "os.scandir"):
+    elif event in ("os.listdir", "os.scandir", "os.walk"):
         resolved = _resolve_arg(args[0] if args else None)
         if not (_is_under(resolved, (work_real,)) or _is_under(resolved, ro_roots)):
             raise PermissionError(f"Blocked directory listing outside deck workspace: {resolved}")
@@ -830,9 +954,8 @@ def _audit_hook(event, args):
                     if os.path.splitext(resolved)[1].lower() in _FORBIDDEN_WRITE_EXTS:
                         raise PermissionError(f"Blocked renaming to executable/code file inside deck workspace: {resolved}")
 
-source_text = script_path.read_text(encoding="utf-8")
 sys.addaudithook(_audit_hook)
-exec(compile(source_text, str(script_path), "exec"), {"__name__": "__main__", "__file__": str(script_path)})
+exec(_main_code, {"__name__": "__main__", "__file__": str(script_path)})
 '''
 
 _APPCONTAINER_PROFILE = "OneRTX.AdvancedDeck.Sandbox"
@@ -893,6 +1016,39 @@ if os.name == "nt":
             ("hThread", wintypes.HANDLE),
             ("dwProcessId", wintypes.DWORD),
             ("dwThreadId", wintypes.DWORD),
+        ]
+
+    class _IO_COUNTERS(ctypes.Structure):
+        _fields_ = [
+            ("ReadOperationCount", ctypes.c_uint64),
+            ("WriteOperationCount", ctypes.c_uint64),
+            ("OtherOperationCount", ctypes.c_uint64),
+            ("ReadTransferCount", ctypes.c_uint64),
+            ("WriteTransferCount", ctypes.c_uint64),
+            ("OtherTransferCount", ctypes.c_uint64),
+        ]
+
+    class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("PerProcessUserTimeLimit", ctypes.c_int64),
+            ("PerJobUserTimeLimit", ctypes.c_int64),
+            ("LimitFlags", wintypes.DWORD),
+            ("MinimumWorkingSetSize", ctypes.c_size_t),
+            ("MaximumWorkingSetSize", ctypes.c_size_t),
+            ("ActiveProcessLimit", wintypes.DWORD),
+            ("Affinity", ctypes.c_size_t),
+            ("PriorityClass", wintypes.DWORD),
+            ("SchedulingClass", wintypes.DWORD),
+        ]
+
+    class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+        _fields_ = [
+            ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
+            ("IoInfo", _IO_COUNTERS),
+            ("ProcessMemoryLimit", ctypes.c_size_t),
+            ("JobMemoryLimit", ctypes.c_size_t),
+            ("PeakProcessMemoryUsed", ctypes.c_size_t),
+            ("PeakJobMemoryUsed", ctypes.c_size_t),
         ]
 
 
@@ -959,20 +1115,36 @@ def _run_icacls(args: list[str]) -> tuple[int, str]:
     return r.returncode, ((r.stdout or "") + "\n" + (r.stderr or "")).strip()
 
 
-def _ensure_py_root_acl(py_exe: str, sid_str: str) -> None:
-    roots: list[Path] = [Path(py_exe).resolve().parent]
-    cfg_p = roots[0] / "pyvenv.cfg"
+def _resolve_py_acl_roots(py_exe: str) -> list[Path]:
+    """Return deduplicated directories requiring AppContainer RX ACL (Scripts/exe dir, venv root, base home)."""
+    exe_dir = Path(py_exe).resolve().parent
+    roots: list[Path] = [exe_dir]
+    cfg_p = exe_dir / "pyvenv.cfg"
     if not cfg_p.is_file():
-        cfg_p = roots[0].parent / "pyvenv.cfg"
+        cfg_p = exe_dir.parent / "pyvenv.cfg"
     if cfg_p.is_file():
+        roots.append(cfg_p.parent.resolve())
         for ln in cfg_p.read_text(encoding="utf-8", errors="ignore").splitlines():
             if ln.strip().lower().startswith("home"):
                 _, _, rhs = ln.partition("=")
                 hp = Path(rhs.strip())
                 if hp.is_dir():
                     roots.append(hp.resolve())
+                    if hp.name.lower() == "scripts" and (hp.parent / "Lib").is_dir():
+                        roots.append(hp.parent.resolve())
                 break
+    dedup: list[Path] = []
+    seen: set[str] = set()
+    for r in roots:
+        k = os.path.normcase(str(r))
+        if k not in seen:
+            seen.add(k)
+            dedup.append(r)
+    return dedup
 
+
+def _ensure_py_root_acl(py_exe: str, sid_str: str) -> None:
+    roots = _resolve_py_acl_roots(py_exe)
     with _APPCONTAINER_LOCK:
         for root_dir in roots:
             key = (os.path.normcase(str(root_dir)), sid_str)
@@ -1032,6 +1204,16 @@ def _run_in_appcontainer(argv: list[str], cwd: Path, env: dict[str, str], timeou
     kernel32.TerminateProcess.restype = wintypes.BOOL
     kernel32.GetExitCodeProcess.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
     kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CreateJobObjectW.argtypes = [ctypes.c_void_p, wintypes.LPCWSTR]
+    kernel32.CreateJobObjectW.restype = wintypes.HANDLE
+    kernel32.SetInformationJobObject.argtypes = [wintypes.HANDLE, wintypes.DWORD, ctypes.c_void_p, wintypes.DWORD]
+    kernel32.SetInformationJobObject.restype = wintypes.BOOL
+    kernel32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    kernel32.AssignProcessToJobObject.restype = wintypes.BOOL
+    kernel32.ResumeThread.argtypes = [wintypes.HANDLE]
+    kernel32.ResumeThread.restype = wintypes.DWORD
+    kernel32.TerminateJobObject.argtypes = [wintypes.HANDLE, wintypes.UINT]
+    kernel32.TerminateJobObject.restype = wintypes.BOOL
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
 
@@ -1083,16 +1265,32 @@ def _run_in_appcontainer(argv: list[str], cwd: Path, env: dict[str, str], timeou
             raise ctypes.WinError(ctypes.get_last_error())
         handles_to_close.append(h_nul)
 
+        h_job = kernel32.CreateJobObjectW(None, None)
+        if not h_job:
+            raise ctypes.WinError(ctypes.get_last_error())
+        handles_to_close.append(h_job)
+        job_limits = _JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+        job_limits.BasicLimitInformation.LimitFlags = 0x00002200  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_JOB_MEMORY
+        job_limits.JobMemoryLimit = 2 * 1024 * 1024 * 1024
+        if not kernel32.SetInformationJobObject(h_job, 9, ctypes.byref(job_limits), ctypes.sizeof(job_limits)):
+            raise ctypes.WinError(ctypes.get_last_error())
+
         attr_size = ctypes.c_size_t(0)
-        kernel32.InitializeProcThreadAttributeList(None, 1, 0, ctypes.byref(attr_size))
+        kernel32.InitializeProcThreadAttributeList(None, 2, 0, ctypes.byref(attr_size))
         attr_buf = (ctypes.c_byte * attr_size.value)()
-        if not kernel32.InitializeProcThreadAttributeList(attr_buf, 1, 0, ctypes.byref(attr_size)):
+        if not kernel32.InitializeProcThreadAttributeList(attr_buf, 2, 0, ctypes.byref(attr_size)):
             raise ctypes.WinError(ctypes.get_last_error())
         attr_initialized = True
 
         sec_caps = _SECURITY_CAPABILITIES(sid_ptr, None, 0, 0)
         if not kernel32.UpdateProcThreadAttribute(
             attr_buf, 0, 0x00020009, ctypes.byref(sec_caps), ctypes.sizeof(sec_caps), None, None
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+
+        handle_list = (wintypes.HANDLE * 3)(h_nul, h_out_w.value, h_err_w.value)
+        if not kernel32.UpdateProcThreadAttribute(
+            attr_buf, 0, 0x00020002, ctypes.byref(handle_list), ctypes.sizeof(handle_list), None, None
         ):
             raise ctypes.WinError(ctypes.get_last_error())
 
@@ -1113,7 +1311,8 @@ def _run_in_appcontainer(argv: list[str], cwd: Path, env: dict[str, str], timeou
         env_text = ("\0".join(env_entries) + "\0\0") if env_entries else "\0\0"
         env_buf = ctypes.create_unicode_buffer(env_text, len(env_text))
 
-        creation_flags = 0x00080000 | 0x00000400 | NO_WINDOW  # EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW
+        # EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED | CREATE_NO_WINDOW
+        creation_flags = 0x00080000 | 0x00000400 | 0x00000004 | NO_WINDOW
         if not kernel32.CreateProcessW(
             argv[0],
             cmdline_buf,
@@ -1129,6 +1328,15 @@ def _run_in_appcontainer(argv: list[str], cwd: Path, env: dict[str, str], timeou
             raise ctypes.WinError(ctypes.get_last_error())
 
         handles_to_close.extend([x for x in (pi.hThread, pi.hProcess) if x])
+        if not kernel32.AssignProcessToJobObject(h_job, pi.hProcess):
+            assign_err = ctypes.get_last_error()
+            kernel32.TerminateProcess(pi.hProcess, 1)
+            raise ctypes.WinError(assign_err)
+        if kernel32.ResumeThread(pi.hThread) == 0xFFFFFFFF:
+            resume_err = ctypes.get_last_error()
+            kernel32.TerminateJobObject(h_job, 1)
+            raise ctypes.WinError(resume_err)
+
         # Close child-side pipe handles in parent immediately so pipe EOF triggers when child exits
         _safe_close(h_out_w.value)
         _safe_close(h_err_w.value)
@@ -1148,12 +1356,14 @@ def _run_in_appcontainer(argv: list[str], cwd: Path, env: dict[str, str], timeou
         wait_rc = kernel32.WaitForSingleObject(pi.hProcess, max(1, int(timeout)) * 1000)
         timed_out = (wait_rc == 0x00000102)
         if timed_out:
+            kernel32.TerminateJobObject(h_job, 124)
             kernel32.TerminateProcess(pi.hProcess, 124)
             kernel32.WaitForSingleObject(pi.hProcess, 5000)
 
         exit_code = wintypes.DWORD(1)
         kernel32.GetExitCodeProcess(pi.hProcess, ctypes.byref(exit_code))
         _safe_close(pi.hProcess)
+        _safe_close(h_job)
 
         t_out.join(timeout=5)
         t_err.join(timeout=5)
@@ -1199,6 +1409,12 @@ def _safe_subprocess_env(work_dir: Optional[Path] = None, *, include_userprofile
 
 
 def _run_build_script(py312: str, work_dir: Path, script_path: Path) -> tuple[bool, str]:
+    if os.name != "nt" and os.environ.get("ALLOW_UNCONTAINED_DECK_EXEC") != "1":
+        return (
+            False,
+            "Refusing uncontained deck script execution on non-Windows host "
+            "(Win32 AppContainer isolation is required; set ALLOW_UNCONTAINED_DECK_EXEC=1 to override).",
+        )
     kit_src = Path.home() / "AI" / "pptx_studio" / "deck_kit.py"
     if kit_src.is_file():
         shutil.copy2(kit_src, work_dir / "deck_kit.py")

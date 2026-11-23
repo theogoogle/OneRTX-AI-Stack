@@ -40,8 +40,11 @@ def _cmd_events(creds, cfg: dict[str, Any], days: int, start_date: str, query: s
     time_max = f"{end_d.isoformat()}T23:59:59Z"
 
     service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    import re as _re
     cal_cfg = cfg.get("calendars") or {}
     cals = cal_cfg.get("include") or [{"id": "primary", "label": "Primary"}]
+    skip_private = bool(cal_cfg.get("exclude_private_visibility", True))
+    exclude_res = [_re.compile(pat, _re.I) for pat in (cal_cfg.get("exclude_title_regex") or [])]
     q_lc = (query or "").strip().lower()
 
     seen: set[tuple[str, str, str]] = set()
@@ -71,6 +74,10 @@ def _cmd_events(creds, cfg: dict[str, Any], days: int, start_date: str, query: s
                 continue
             summary = (ev.get("summary") or "").strip()
             if not summary:
+                continue
+            if skip_private and ev.get("visibility") == "private":
+                continue
+            if any(rx.search(summary) for rx in exclude_res):
                 continue
             start_obj = ev.get("start") or {}
             end_obj = ev.get("end") or {}

@@ -82,6 +82,14 @@ def _load_open_terminal_secret() -> str:
     return ""
 
 
+def _normalize_key_name(key: str) -> str:
+    """Split camelCase/PascalCase boundaries so apiKey/clientSecret match SECRET_KEY_NAME_RE."""
+    if not key:
+        return ""
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", str(key))
+    return re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", s)
+
+
 def _scrub_value(obj, ot_secret: str, parent_key: str = ""):
     if isinstance(obj, dict):
         return {k: _scrub_value(v, ot_secret, k) for k, v in obj.items()}
@@ -94,7 +102,7 @@ def _scrub_value(obj, ot_secret: str, parent_key: str = ""):
             return obj.replace(ot_secret, OPEN_TERMINAL_PLACEHOLDER)
         if SECRET_VALUE_RE.search(obj):
             return REDACTED_SECRET_PLACEHOLDER
-        if SECRET_KEY_NAME_RE.search(parent_key or "") and obj not in (
+        if SECRET_KEY_NAME_RE.search(_normalize_key_name(parent_key or "")) and obj not in (
             "",
             "local",
             "none",

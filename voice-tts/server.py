@@ -138,12 +138,18 @@ def list_voices() -> list:
 def resolve_voice(language: str, requested_name: str = None, ref_audio_override: str = None, ref_text_override: str = None):
     """Find best matching (wav_path, transcript, voice_name) for EN or FR."""
     if ref_audio_override:
-        p = Path(ref_audio_override)
-        if p.is_file():
-            txt = ref_text_override
-            if txt is None and p.with_suffix(".txt").exists():
-                txt = p.with_suffix(".txt").read_text(encoding="utf-8").strip()
-            return str(p), (txt or ""), p.stem
+        voices_root = VOICES_DIR.resolve()
+        raw_p = Path(ref_audio_override)
+        cand = raw_p if raw_p.is_absolute() else (voices_root / raw_p)
+        p = cand.resolve()
+        if p == voices_root or not p.is_relative_to(voices_root) or p.suffix.lower() != ".wav" or not p.is_file():
+            raise ValueError("ref_audio_override must resolve to an existing .wav file inside VOICES_DIR")
+        txt = ref_text_override
+        if txt is None:
+            txt_p = p.with_suffix(".txt").resolve()
+            if txt_p.is_relative_to(voices_root) and txt_p.is_file():
+                txt = txt_p.read_text(encoding="utf-8").strip()
+        return str(p), (txt or ""), p.stem
     voices = list_voices()
     if not voices:
         return None, "", None

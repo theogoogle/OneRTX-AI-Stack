@@ -1302,10 +1302,11 @@ def run_playwright_task(
             req_body["tools"] = step_tools
         if reasoning_effort:
             req_body["reasoning_effort"] = reasoning_effort
-        try:
-            last_req_file.write_text(json.dumps(req_body, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
+        if os.environ.get("ROUTER_DEBUG_SAVE_REQUESTS", "0") == "1":
+            try:
+                last_req_file.write_text(json.dumps(req_body, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
 
         model_calls += 1
         conn_holder = {"conn": None}
