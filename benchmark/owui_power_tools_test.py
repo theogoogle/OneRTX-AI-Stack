@@ -38,6 +38,8 @@ def _load_mod(path: Path, name: str):
 
 
 def test_youtube_transcript():
+    import re as _re
+
     yt = _load_mod(OWUI_DIR / "tools" / "youtube_transcript.py", "owui_yt")
     assert yt._extract_video_id("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=12s") == "dQw4w9WgXcQ"
     assert yt._extract_video_id("https://youtu.be/dQw4w9WgXcQ") == "dQw4w9WgXcQ"
@@ -50,8 +52,85 @@ def test_youtube_transcript():
     data = yt._fetch_transcript_sync("dQw4w9WgXcQ", "en,fr")
     assert data["video_id"] == "dQw4w9WgXcQ"
     assert data["chunks"] and len(data["chunks"]) >= 3
+    assert data["paragraphs"] and len(data["paragraphs"]) >= 3
+    assert data["word_count"] > 50 and data["read_min"] >= 1
     assert data["duration_s"] > 30
-    print(f"  [PASS] youtube_transcript live ({data['title'][:40] or data['video_id']}, {len(data['chunks'])} chunks, {data['language']})")
+
+    card_html = yt.render_transcript_html_card(data)
+    assert "iframe:height" in card_html
+    assert "https://www.youtube.com/watch?v=dQw4w9WgXcQ" in card_html
+    assert "watchUrl" in card_html and "&t=" in card_html
+    for elem_id in ("yt-search", "btn-copy", "btn-dl", "btn-ts", "btn-expand"):
+        assert elem_id in card_html, f"Missing {elem_id} in transcript card HTML"
+    assert "<script src=" not in card_html.lower() and "<link " not in card_html.lower()
+
+    # Verify async Tools emits native Open WebUI `embeds` + TRANSCRIPT_CARD_DISPLAYED: yes
+    yt_tools = yt.Tools()
+
+    async def _check_yt_emit():
+        events: list[dict] = []
+
+        async def _emit(ev: dict) -> None:
+            events.append(ev)
+
+        res = await yt_tools.get_youtube_transcript("https://www.youtube.com/watch?v=dQw4w9WgXcQ", __event_emitter__=_emit)
+        embeds = [e for e in events if e.get("type") == "embeds"]
+        assert len(embeds) == 1 and embeds[0]["data"]["replace"] is False, embeds
+        assert "yt-search" in embeds[0]["data"]["embeds"][0]
+        assert "TRANSCRIPT_CARD_DISPLAYED: yes" in res, res
+        return res
+
+    asyncio.run(_check_yt_emit())
+
+    # Headless Chromium Playwright interactive check (search, highlight, timestamps toggle, expand, overflow)
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        sync_playwright = None
+    if sync_playwright is not None:
+        words = [w for p in data["paragraphs"] for w in _re.findall(r"[A-Za-z]{4,}", p["text"])]
+        probe_word = words[0] if words else "never"
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                for vw in (760, 360):
+                    page = browser.new_page(viewport={"width": vw, "height": 700})
+                    errs: list[str] = []
+                    page.on("pageerror", lambda e: errs.append(str(e)))
+                    page.on("console", lambda m: errs.append(m.text) if m.type == "error" and "i.ytimg.com" not in m.text else None)
+                    page.set_content(card_html, wait_until="domcontentloaded")
+                    assert page.locator(".para").count() == len(data["paragraphs"])
+                    assert page.locator(".para a.ts-chip").first.get_attribute("href").startswith("https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=")
+                    ov = page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+                    assert ov, f"Horizontal overflow on {vw}px viewport"
+                    if vw == 760:
+                        # Search & highlight
+                        page.fill("#yt-search", probe_word)
+                        assert page.locator("#yt-body mark").count() >= 1
+                        assert "/" in page.locator("#yt-match-count").inner_text()
+                        page.fill("#yt-search", "")
+                        # Timestamps toggle
+                        assert page.locator("#btn-ts").get_attribute("aria-pressed") == "true"
+                        page.click("#btn-ts")
+                        assert page.locator("#btn-ts").get_attribute("aria-pressed") == "false"
+                        assert "hide-ts" in (page.locator("#body-scroll").get_attribute("class") or "")
+                        page.click("#btn-ts")
+                        assert page.locator("#btn-ts").get_attribute("aria-pressed") == "true"
+                        # Expand / collapse
+                        h_before = page.evaluate("document.getElementById('card').getBoundingClientRect().height")
+                        page.click("#btn-expand")
+                        assert page.locator("#btn-expand").get_attribute("aria-expanded") == "true"
+                        assert page.locator("#btn-expand").inner_text().strip() == "Collapse"
+                        h_after = page.evaluate("document.getElementById('card').getBoundingClientRect().height")
+                        assert h_after >= h_before, (h_before, h_after)
+                        page.click("#btn-expand")
+                        assert page.locator("#btn-expand").inner_text().strip() == "Expand"
+                    assert not errs, f"YouTube card Playwright errors @ {vw}px: {errs}"
+                    page.close()
+            finally:
+                browser.close()
+
+    print(f"  [PASS] youtube_transcript live + interactive card ({data['title'][:40] or data['video_id']}, {len(data['paragraphs'])} structured paragraphs, {data['word_count']} words, {data['language']})")
 
 
 def test_doc_export():
@@ -125,14 +204,111 @@ def test_market_finance():
     with tempfile.TemporaryDirectory() as td:
         tdp = Path(td)
         q_png = tdp / "nvda.png"
+        q_html = tdp / "nvda.html"
         c_png = tdp / "cmp.png"
-        q = finance_cli.cmd_quote("NVDA", "1mo", str(q_png))
+        c_html = tdp / "cmp.html"
+        q = finance_cli.cmd_quote("NVDA", "1mo", str(q_png), html_out=str(q_html))
         assert q["ok"] and q["price"] > 0 and q_png.is_file() and q_png.stat().st_size > 15_000
-        fx = finance_cli.cmd_quote("GBP/EUR", "5d", None)
+        assert q_html.is_file() and q_html.stat().st_size > 6_000
+        q_html_txt = q_html.read_text(encoding="utf-8")
+        for lbl in ("24H", "7D", "1M", "1Y", "5Y"):
+            assert f">{lbl}</button>" in q_html_txt, f"Missing {lbl} tab in quote HTML"
+            assert lbl in (q.get("range_returns") or {}), f"Missing {lbl} in quote range_returns: {q.get('range_returns')}"
+        assert "iframe:height" in q_html_txt
+        assert "<script src=" not in q_html_txt.lower() and "<link " not in q_html_txt.lower()
+
+        fx = finance_cli.cmd_quote("GBP/EUR", "7d", None)
         assert fx["ok"] and 0.5 < fx["price"] < 2.0
-        cmp_res = finance_cli.cmd_compare("NVDA,MSFT", "3mo", str(c_png))
+
+        cmp_res = finance_cli.cmd_compare("NVDA,MSFT", "1y", str(c_png), html_out=str(c_html))
         assert cmp_res["ok"] and len(cmp_res["items"]) == 2 and c_png.is_file() and c_png.stat().st_size > 15_000
-        print(f"  [PASS] market-finance live (NVDA={q['price']} {q['currency']}, GBP/EUR={fx['price']}, compare PNG={c_png.stat().st_size} B)")
+        assert c_html.is_file() and c_html.stat().st_size > 6_000
+        c_html_txt = c_html.read_text(encoding="utf-8")
+        for lbl in ("24H", "7D", "1M", "1Y", "5Y"):
+            assert f">{lbl}</button>" in c_html_txt, f"Missing {lbl} tab in compare HTML"
+            assert lbl in (cmp_res["items"][0].get("range_returns") or {}), f"Missing {lbl} in compare range_returns"
+        assert "iframe:height" in c_html_txt
+        assert "<script src=" not in c_html_txt.lower() and "<link " not in c_html_txt.lower()
+
+        # Verify market_finance.py async Tools emits native Open WebUI `embeds` without redundant PNG markdown
+        mf_mod = _load_mod(OWUI_DIR / "tools" / "market_finance.py", "owui_mf_embed")
+        mf_tools = mf_mod.Tools()
+
+        async def _check_emitters():
+            events_q: list[dict] = []
+
+            async def _emit_q(ev: dict) -> None:
+                events_q.append(ev)
+
+            out_q = await mf_tools.get_market_quote("NVDA", period="1mo", __event_emitter__=_emit_q)
+            embeds_q = [e for e in events_q if e.get("type") == "embeds"]
+            assert len(embeds_q) == 1 and embeds_q[0]["data"]["replace"] is False, embeds_q
+            assert "NVDA" in embeds_q[0]["data"]["embeds"][0]
+            q_json = json.loads(out_q)
+            assert q_json.get("interactive_chart_displayed") is True
+            assert q_json.get("available_ranges") == ["24H", "7D", "1M", "1Y", "5Y"]
+            assert "![" not in out_q, f"Unexpected markdown image when embed emitted: {out_q}"
+
+            events_c: list[dict] = []
+
+            async def _emit_c(ev: dict) -> None:
+                events_c.append(ev)
+
+            out_c = await mf_tools.compare_tickers("NVDA,MSFT", period="1y", __event_emitter__=_emit_c)
+            embeds_c = [e for e in events_c if e.get("type") == "embeds"]
+            assert len(embeds_c) == 1 and embeds_c[0]["data"]["replace"] is False, embeds_c
+            c_json = json.loads(out_c)
+            assert c_json.get("interactive_chart_displayed") is True
+            assert c_json.get("available_ranges") == ["24H", "7D", "1M", "1Y", "5Y"]
+            assert "![" not in out_c, f"Unexpected markdown image when embed emitted: {out_c}"
+
+        asyncio.run(_check_emitters())
+
+        # Interactive Playwright verification across all 5 tabs + hover crosshair (no external CDN / console errors)
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            sync_playwright = None
+        if sync_playwright is not None:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                try:
+                    for kind, html_path in (("quote", q_html), ("compare", c_html)):
+                        page = browser.new_page(viewport={"width": 760, "height": 540})
+                        errs: list[str] = []
+                        page.on("pageerror", lambda e: errs.append(str(e)))
+                        page.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
+                        page.set_content(html_path.read_text(encoding="utf-8"), wait_until="load")
+                        seen_paths: dict[str, str] = {}
+                        seen_pills: dict[str, str] = {}
+                        for rk in ("24h", "7d", "1mo", "1y", "5y"):
+                            btn = page.locator(f'button[data-range="{rk}"]')
+                            assert btn.is_visible() and not btn.is_disabled(), f"{kind} tab {rk} disabled or hidden"
+                            btn.click()
+                            assert btn.get_attribute("aria-selected") == "true", f"{kind} tab {rk} not selected"
+                            pill_txt = page.locator("#ret-pill").inner_text().strip()
+                            assert pill_txt and pill_txt != "—", f"{kind} empty ret-pill on {rk}"
+                            if kind == "quote":
+                                d_attr = page.locator("#line-path").get_attribute("d") or ""
+                            else:
+                                d_attr = "|".join(page.locator("#lines-layer path.line-path").nth(i).get_attribute("d") or "" for i in range(2))
+                            assert d_attr.startswith("M") and "L" in d_attr, f"{kind} bad SVG path on {rk}: {d_attr[:60]}"
+                            seen_paths[rk] = d_attr
+                            seen_pills[rk] = pill_txt
+                        assert len(set(seen_paths.values())) >= 4, f"{kind} tabs did not update SVG paths: {list(seen_paths.keys())}"
+                        box = page.locator("#chart-svg").bounding_box()
+                        assert box and box["width"] > 200 and box["height"] > 100
+                        page.mouse.move(box["x"] + box["width"] * 0.45, box["y"] + box["height"] * 0.5)
+                        page.wait_for_timeout(80)
+                        tip_cls = page.locator("#hover-tip").get_attribute("class") or ""
+                        tip_txt = page.locator("#hover-tip").inner_text().strip()
+                        assert "show" in tip_cls and len(tip_txt) > 5, f"{kind} hover tooltip failed: cls={tip_cls!r} txt={tip_txt!r}"
+                        assert not errs, f"{kind} Playwright console/page errors: {errs}"
+                        page.close()
+                finally:
+                    browser.close()
+
+        print(f"  [PASS] market-finance live + interactive 5-tab Playwright cards (NVDA={q['price']} {q['currency']}, GBP/EUR={fx['price']}, compare PNG={c_png.stat().st_size} B)")
 
 
 def test_smart_visuals_deterministic():

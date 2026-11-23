@@ -274,7 +274,13 @@ YOUTUBE_TOOLS = {"get_youtube_transcript"}
 YOUTUBE_THINK_BUDGET = 4096
 YOUTUBE_SYSTEM = (
     "YouTube Transcript rule: Call `get_youtube_transcript` ONCE with the YouTube URL from the user's message. "
-    "Ground your summary, timestamps, translation, or answers strictly in the returned transcript. Stop calling tools once returned."
+    "When `TRANSCRIPT_CARD_DISPLAYED: yes` is returned, the FULL structured, searchable, copyable, and downloadable transcript "
+    "with clickable timestamps is ALREADY displayed to the user in an interactive card—NEVER repeat, copy, or re-emit the full "
+    "transcript verbatim! Instead, immediately write a crisp, well-structured response in the user's language: "
+    "(1) for 'transcribe' / 'get transcript' requests, provide a short **TL;DR** (2–3 sentences), **Key Chapters & Takeaways** "
+    "(4–7 bullets with `[MM:SS]` timestamps), and a 1-line note pointing to the full interactive transcript card; "
+    "(2) for specific questions, summaries, or translations, answer thoroughly grounded strictly in the transcript. "
+    "Stop calling tools once returned."
 )
 YOUTUBE_URL_RE = re.compile(
     r"(?:https?://)?(?:www\.|m\.)?(?:youtube\.com/(?:watch\?(?:[^#\s]*&)?v=|shorts/|live/|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})\b",
@@ -309,8 +315,9 @@ FINANCE_TOOLS = {"get_market_quote", "compare_tickers"}
 FINANCE_THINK_BUDGET = 4096
 FINANCE_SYSTEM = (
     "Market & Finance rule: Use `get_market_quote(symbol_or_query, period, include_chart=True)` for single stock/ETF/index/crypto/FX "
-    "prices & charts, or `compare_tickers(symbols, period)` when comparing 2–5 assets. Reproduce any returned chart image markdown "
-    "`![...](...)` verbatim in your reply and summarize the live metrics cleanly. Never invent prices."
+    "prices & charts, or `compare_tickers(symbols, period)` when comparing 2–5 assets. When `interactive_chart_displayed` is true, "
+    "an interactive 24H/7D/1M/1Y/5Y chart card is already embedded in chat—do NOT invent `![...]` links or ASCII charts; if a "
+    "fallback `![...](...)` link is returned, reproduce it verbatim. Summarize live metrics concisely and never invent prices."
 )
 
 AUTO_POWER_TOOL_NAMES = (

@@ -28,7 +28,7 @@ try:
     from open_webui.routers.files import upload_file_handler
 
     _HAS_OWUI_FILES = True
-except Exception:
+except (Exception, SystemExit):
     _HAS_OWUI_FILES = False
 
 NO_WINDOW = 0x08000000 if os.name == "nt" else 0
@@ -75,6 +75,10 @@ async def _upload_png(raw_bytes: bytes, filename: str, request: Any, user_dict: 
 class Tools:
     class Valves(BaseModel):
         emit_status: bool = Field(default=True, description="Show market lookup status pills in Open WebUI.")
+        emit_interactive_chart: bool = Field(
+            default=True,
+            description="Display interactive 24H/7D/1M/1Y/5Y HTML chart card in Open WebUI.",
+        )
 
     def __init__(self):
         self.valves = self.Valves()
@@ -86,6 +90,16 @@ class Tools:
             except Exception:
                 pass
 
+    async def _emit_embed(self, emitter, html_card: str) -> bool:
+        if not (emitter and html_card):
+            return False
+        try:
+            await emitter({"type": "embeds", "data": {"embeds": [html_card], "replace": False}})
+            return True
+        except Exception as e:
+            log.warning("Interactive chart embed failed: %s", e)
+            return False
+
     async def get_market_quote(
         self,
         symbol_or_query: str,
@@ -96,12 +110,12 @@ class Tools:
         __request__=None,
     ) -> str:
         """
-        Fetch real-time market price, period return, 52-week range, and a 300-DPI price chart for any stock, ETF, index, crypto, or currency pair.
+        Fetch real-time price, multi-range returns, and an interactive 24H/7D/1M/1Y/5Y chart for any stock, ETF, index, crypto, or FX.
 
         :param symbol_or_query: Ticker symbol or name (e.g. 'NVDA', 'AAPL', 'FTSE 100', 'Bitcoin', 'GBP/EUR', 'LVMH').
-        :param period: Chart timeframe: '1d', '5d', '1mo', '3mo', '6mo', '1y', or '5y'.
-        :param include_chart: Render and return a 300-DPI price chart image (default true).
-        :return: Market metrics JSON + inline chart image markdown.
+        :param period: Default chart timeframe: '24h', '7d', '1mo', '1y', or '5y' (all 5 ranges are interactive in chat).
+        :param include_chart: Display an interactive chart (or fallback 300-DPI PNG) in chat (default true).
+        :return: Market metrics JSON (interactive card emitted automatically; PNG link included only on fallback).
         """
         cli = Path.home() / "AI" / "market-finance" / "finance_cli.py"
         if not cli.is_file():
@@ -110,17 +124,24 @@ class Tools:
         await self._emit(__event_emitter__, f"📈 Fetching live market data for {symbol_or_query[:30]}…", done=False)
         py312 = _find_system_python312()
         chart_name = f"chart_{uuid.uuid4().hex[:8]}.png"
+        html_name = f"chart_{uuid.uuid4().hex[:8]}.html"
+        use_embed = bool(include_chart and __event_emitter__ and self.valves.emit_interactive_chart)
 
         def _run() -> dict[str, Any]:
             with tempfile.TemporaryDirectory() as td:
                 tdp = Path(td)
                 chart_p = tdp / chart_name
+                html_p = tdp / html_name
                 cmd = [py312, "-I", "-X", "utf8", str(cli), "quote", "--symbol", symbol_or_query, "--period", period or "1mo"]
-                if include_chart:
+                if use_embed:
+                    cmd.extend(["--html-out", str(html_p)])
+                elif include_chart:
                     cmd.extend(["--chart-out", str(chart_p)])
-                res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30, creationflags=NO_WINDOW)
+                res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=35, creationflags=NO_WINDOW)
                 data = json.loads((res.stdout or res.stderr).strip())
-                if chart_p.is_file():
+                if html_p.is_file():
+                    data["html_text"] = html_p.read_text(encoding="utf-8")
+                elif chart_p.is_file():
                     data["chart_bytes"] = chart_p.read_bytes()
                 return data
 
@@ -134,9 +155,18 @@ class Tools:
             await self._emit(__event_emitter__, "⚠️ Market symbol not found", done=True)
             return f"[TOOL_RESULT]\n{data.get('error') or 'Unknown error'}"
 
+        html_text = data.pop("html_text", None)
         chart_bytes = data.pop("chart_bytes", None)
         data.pop("chart_path", None)
-        chart_url = await _upload_png(chart_bytes, chart_name, __request__, __user__) if chart_bytes else None
+        data.pop("html_path", None)
+
+        embedded = await self._emit_embed(__event_emitter__, html_text) if use_embed and html_text else False
+        chart_url = None
+        if embedded:
+            data["interactive_chart_displayed"] = True
+            data["available_ranges"] = ["24H", "7D", "1M", "1Y", "5Y"]
+        elif chart_bytes:
+            chart_url = await _upload_png(chart_bytes, chart_name, __request__, __user__)
 
         pct = f" ({data['day_change_pct']:+}%)" if data.get("day_change_pct") is not None else ""
         await self._emit(__event_emitter__, f"📈 {data['symbol']} · {data['price']} {data['currency']}{pct}", done=True)
@@ -148,17 +178,17 @@ class Tools:
     async def compare_tickers(
         self,
         symbols: str,
-        period: str = "6mo",
+        period: str = "1y",
         __event_emitter__=None,
         __user__: Optional[dict] = None,
         __request__=None,
     ) -> str:
         """
-        Compare 2 to 5 tickers/indices/currencies side-by-side with normalized % performance and a 300-DPI multi-line chart.
+        Compare 2 to 5 tickers/indices/currencies with interactive 24H/7D/1M/1Y/5Y % performance charts and live metrics.
 
         :param symbols: Comma-separated tickers or names (e.g. 'NVDA, MSFT, AAPL' or 'BTC, Gold, S&P 500').
-        :param period: Comparison timeframe: '1mo', '3mo', '6mo', '1y', or '5y'.
-        :return: Side-by-side metrics JSON + inline comparison chart image markdown.
+        :param period: Default timeframe: '24h', '7d', '1mo', '1y', or '5y' (all 5 ranges are interactive in chat).
+        :return: Side-by-side metrics JSON (interactive card emitted automatically; PNG link included only on fallback).
         """
         cli = Path.home() / "AI" / "market-finance" / "finance_cli.py"
         if not cli.is_file():
@@ -167,14 +197,24 @@ class Tools:
         await self._emit(__event_emitter__, f"📊 Comparing {symbols[:40]} ({period})…", done=False)
         py312 = _find_system_python312()
         chart_name = f"compare_{uuid.uuid4().hex[:8]}.png"
+        html_name = f"compare_{uuid.uuid4().hex[:8]}.html"
+        use_embed = bool(__event_emitter__ and self.valves.emit_interactive_chart)
 
         def _run() -> dict[str, Any]:
             with tempfile.TemporaryDirectory() as td:
-                chart_p = Path(td) / chart_name
-                cmd = [py312, "-I", "-X", "utf8", str(cli), "compare", "--symbols", symbols, "--period", period or "6mo", "--chart-out", str(chart_p)]
-                res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=40, creationflags=NO_WINDOW)
+                tdp = Path(td)
+                chart_p = tdp / chart_name
+                html_p = tdp / html_name
+                cmd = [py312, "-I", "-X", "utf8", str(cli), "compare", "--symbols", symbols, "--period", period or "1y"]
+                if use_embed:
+                    cmd.extend(["--html-out", str(html_p)])
+                else:
+                    cmd.extend(["--chart-out", str(chart_p)])
+                res = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=45, creationflags=NO_WINDOW)
                 data = json.loads((res.stdout or res.stderr).strip())
-                if chart_p.is_file():
+                if html_p.is_file():
+                    data["html_text"] = html_p.read_text(encoding="utf-8")
+                elif chart_p.is_file():
                     data["chart_bytes"] = chart_p.read_bytes()
                 return data
 
@@ -188,9 +228,18 @@ class Tools:
             await self._emit(__event_emitter__, "⚠️ Market comparison failed", done=True)
             return f"[TOOL_RESULT]\n{data.get('error') or 'Unknown error'}"
 
+        html_text = data.pop("html_text", None)
         chart_bytes = data.pop("chart_bytes", None)
         data.pop("chart_path", None)
-        chart_url = await _upload_png(chart_bytes, chart_name, __request__, __user__) if chart_bytes else None
+        data.pop("html_path", None)
+
+        embedded = await self._emit_embed(__event_emitter__, html_text) if use_embed and html_text else False
+        chart_url = None
+        if embedded:
+            data["interactive_chart_displayed"] = True
+            data["available_ranges"] = ["24H", "7D", "1M", "1Y", "5Y"]
+        elif chart_bytes:
+            chart_url = await _upload_png(chart_bytes, chart_name, __request__, __user__)
 
         await self._emit(__event_emitter__, f"📊 Compared {len(data.get('items') or [])} tickers ({period})", done=True)
         parts = [json.dumps(data, ensure_ascii=False)]
