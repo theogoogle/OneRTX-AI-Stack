@@ -925,7 +925,7 @@ def classify_coding_with_lfm(text):
         shape == "opencode"
         or has_pasted_code
         or len(text) > 500
-        or (BUILD_REQUEST.search(snippet) and APP_OR_GAME_NOUNS.search(snippet))
+        or (BUILD_REQUEST.search(snippet) and (APP_OR_GAME_NOUNS.search(snippet) or SINGLE_FILE_CHAT_RE.search(snippet)))
     ):
         domain = "logic_ui"
 
@@ -3058,22 +3058,50 @@ class Handler(BaseHTTPRequestHandler):
             body["tools"] = img_tools
             names_kept = {((t.get("function") or {}).get("name") or t.get("name") or "") for t in img_tools}
             urls = _chat_image_file_urls(body.get("messages") or [])
+            msgs_cur = body.get("messages") or []
+            last_u_idx = next((i for i in range(len(msgs_cur) - 1, -1, -1) if msgs_cur[i].get("role") == "user"), None)
+            last_u_txt = user_text(msgs_cur[last_u_idx].get("content")) if last_u_idx is not None else ""
+            wants_multi_img = bool(re.search(
+                r"\b([2-9]|two|three|four|several|multiple|deux|trois|plusieurs)\s+(?:distinct\s+|different\s+)?images?\b",
+                last_u_txt,
+                re.I,
+            ))
+            tail_msgs = msgs_cur[last_u_idx + 1:] if last_u_idx is not None else []
+            saw_img_call = any(
+                m.get("role") == "assistant"
+                and any(((tc.get("function") or {}).get("name") or tc.get("name") or "") in IMAGE_GEN_TOOLS for tc in (m.get("tool_calls") or []))
+                for m in tail_msgs
+            )
+            saw_img_success = any(
+                m.get("role") == "tool" and re.search(r'"status"\s*:\s*"success"', str(m.get("content") or ""))
+                for m in tail_msgs
+            )
+            post_image = bool(saw_img_call and saw_img_success and not wants_multi_img)
             rule_parts = []
-            if names_kept:
+            if post_image:
+                body["tool_choice"] = "none"
                 rule_parts.append(
-                    "Image tool rule: Call `edit_image` or `generate_image` ONCE for the user's request (unless they "
-                    "explicitly asked for multiple distinct images). Once a tool returns `\"status\": \"success\"`, "
-                    "the image is already visible in chat—stop calling tools, ignore any instructions about "
-                    "`display_file` or `terminal_path`, and give a brief final reply."
+                    "Image tool rule: The requested image has already been generated and is displayed in chat—"
+                    "stop calling tools, ignore any instructions about `display_file` or `terminal_path`, "
+                    "and reply to the user in 1-2 short natural sentences confirming the image "
+                    "(never output JSON, action objects, code blocks, or tool calls)."
                 )
-            if "edit_image" in names_kept and urls:
-                rule_parts.append(
-                    "When modifying, iterating on, or adding/removing/changing elements of an existing image in this "
-                    "chat, call `edit_image` (NOT `generate_image`) so the original subject and composition are "
-                    f"preserved, passing `image_urls` as a JSON array of strings (not a quoted string), e.g. "
-                    f"`image_urls={json.dumps([urls[-1]])}` (or multiple URLs if combining images), and a clear "
-                    "description of the edit in `prompt`. Call `generate_image` only for a brand-new unrelated subject."
-                )
+            else:
+                if names_kept:
+                    rule_parts.append(
+                        "Image tool rule: Call `edit_image` or `generate_image` ONCE for the user's request (unless they "
+                        "explicitly asked for multiple distinct images). Once a tool returns `\"status\": \"success\"`, "
+                        "the image is already visible in chat—stop calling tools, ignore any instructions about "
+                        "`display_file` or `terminal_path`, and give a brief final reply."
+                    )
+                if "edit_image" in names_kept and urls:
+                    rule_parts.append(
+                        "When modifying, iterating on, or adding/removing/changing elements of an existing image in this "
+                        "chat, call `edit_image` (NOT `generate_image`) so the original subject and composition are "
+                        f"preserved, passing `image_urls` as a JSON array of strings (not a quoted string), e.g. "
+                        f"`image_urls={json.dumps([urls[-1]])}` (or multiple URLs if combining images), and a clear "
+                        "description of the edit in `prompt`. Call `generate_image` only for a brand-new unrelated subject."
+                    )
             if rule_parts:
                 inject_system(body, door, " ".join(rule_parts))
 
@@ -3541,6 +3569,7 @@ class Handler(BaseHTTPRequestHandler):
                 else None
             )
             saw_done = False
+            saw_tool_calls = False
             while True:
                 chunk = resp.read1(65536)
                 if not chunk:
@@ -3571,6 +3600,8 @@ class Handler(BaseHTTPRequestHandler):
                         drop_empty_delta = False
                         for ch in sev.get("choices") or []:
                             dl = ch.get("delta") or {}
+                            if dl.get("tool_calls"):
+                                saw_tool_calls = True
                             c_piece = dl.get("content") or ""
                             if c_piece:
                                 out_chars += len(c_piece)
@@ -3652,6 +3683,31 @@ class Handler(BaseHTTPRequestHandler):
                         }, tier=entry.get("tier", ""), model=str(entry.get("model", "")))
                 self._clear_owui_loading_status(entry, ui_meta)
                 self._emit_owui_fallback_photos(entry, ui_meta, "".join(out_text_parts))
+                full_oai_txt = "".join(out_text_parts)
+                if not saw_tool_calls and "</html>" in full_oai_txt.lower():
+                    def _emit_html_delta(text_str):
+                        self._emit_sse_json({
+                            "id": "chatcmpl-html-footer",
+                            "object": "chat.completion.chunk",
+                            "created": int(time.time()),
+                            "model": str(entry.get("model", body.get("model"))),
+                            "choices": [{"index": 0, "delta": {"content": text_str}, "finish_reason": None}],
+                        }, tier=entry.get("tier", ""), model=str(entry.get("model", "")))
+
+                    foot = self._html_footer_with_repair(
+                        body,
+                        full_oai_txt,
+                        str(entry.get("model", body.get("model", ""))),
+                        entry,
+                        emit_fn=_emit_html_delta,
+                        status_fn=(
+                            (lambda ev_obj: self._emit_sse_json(ev_obj, tier=entry.get("tier", ""), model=str(entry.get("model", ""))))
+                            if entry.get("_owui_stream")
+                            else None
+                        ),
+                    )
+                    if foot:
+                        _emit_html_delta(foot)
                 if (out_tokens <= 0 and out_chars > 0) or in_tokens <= 0:
                     entry["tokens_estimated"] = True   # LM Studio sent no usage: counted from text length
                 if out_tokens <= 0 and out_chars > 0:

@@ -645,6 +645,109 @@ def test_tool_call_dedup_and_loop_cut():
     assert recorded["status"] == 200, recorded
 
 
+def test_post_image_turn2_and_single_file_html_routing():
+    """Verify Round 2 after generate_image disables re-calling and single-file HTML apps avoid quick/fast downgrade."""
+    import io
+    from unittest.mock import patch
+    # 1. Single-file HTML app build request promoted out of LFM 'quick' -> 'logic_ui'
+    pomodoro = "Build a self-contained single-file HTML Pomodoro timer with start, pause, reset buttons and a visual countdown ring."
+    router._coding_route_cache.clear()
+    with patch.object(router, "lfm_json", return_value={"shape": "chat", "domain": "quick"}):
+        info = router.classify_coding_with_lfm(pomodoro)
+    assert info["shape"] == "chat" and info["domain"] == "logic_ui", info
+
+    # 2. Post-image Turn 2 sets tool_choice='none' and injects plain-text reply instruction
+    ow_tools = [
+        {"type": "function", "function": {"name": "get_current_timestamp", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "calculate_timestamp", "parameters": {"type": "object", "properties": {}}}},
+        {"type": "function", "function": {"name": "generate_image", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}}}}},
+        {"type": "function", "function": {"name": "edit_image", "parameters": {"type": "object", "properties": {"prompt": {"type": "string"}, "image_urls": {"type": "array"}}}}},
+    ]
+    b_turn2 = {
+        "model": "auto",
+        "tools": [dict(t) for t in ow_tools],
+        "messages": [
+            {"role": "user", "content": "Generate an image of a sunlit Parisian bookshop"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "c1", "function": {"name": "generate_image", "arguments": '{"prompt":"bookshop"}'}}]},
+            {"role": "tool", "tool_call_id": "c1", "content": json.dumps({"status": "success", "images": ["/api/v1/files/abc/content"]})},
+        ],
+    }
+    captured = {}
+
+    class _H(router.Handler):
+        def __init__(self):
+            pass
+
+        def _forward(self, path, b_out, entry):
+            captured["body"] = b_out
+            return "ok"
+
+    _H()._dispatch("/v1/chat/completions", "openai", b_turn2, "fast", router.MODELS["fast"], False, None, [], {})
+    assert captured["body"].get("tool_choice") == "none", captured["body"]
+    sys_txt = " ".join(str(m.get("content")) for m in captured["body"]["messages"] if m.get("role") == "system")
+    assert "already been generated" in sys_txt and "never output JSON" in sys_txt, sys_txt
+
+    # 3. Direct OpenAI _forward runs _html_footer_with_repair on </html> answers without tool calls
+    html_sse = (
+        'data: {"id":"1","choices":[{"index":0,"delta":{"content":"<!DOCTYPE html><html><body>Hi</body></html>"},"finish_reason":null}]}\n\n'
+        'data: {"id":"1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":12}}\n\n'
+        "data: [DONE]\n\n"
+    ).encode("utf-8")
+
+    class _FR:
+        def __init__(self, raw):
+            self.status = 200
+            self._buf = io.BytesIO(raw)
+        def getheader(self, name, default=None):
+            return "text/event-stream" if name.lower() == "content-type" else default
+        def getheaders(self):
+            return [("Content-Type", "text/event-stream")]
+        def read1(self, n):
+            return self._buf.read(n)
+    class _FC:
+        def __init__(self, raw):
+            self.sock = type("_S", (), {})()
+            self._r = _FR(raw)
+        def request(self, *a, **kw):
+            pass
+        def getresponse(self):
+            return self._r
+        def close(self):
+            pass
+
+    out_buf = io.BytesIO()
+    class _SH(router.Handler):
+        def __init__(self):
+            self.connection = None
+            self.headers = {}
+            self.wfile = out_buf
+            self._sse_started = True
+        def send_response(self, *a, **kw):
+            pass
+        def send_header(self, *a, **kw):
+            pass
+        def end_headers(self):
+            pass
+        def _ensure_sse_headers(self, **kw):
+            pass
+        def _emit_owui_preamble(self, entry):
+            return {}
+        def _clear_owui_loading_status(self, entry, ui_meta):
+            pass
+        def _chunk(self, b):
+            self.wfile.write(b)
+        def _record(self, entry, b, payload, started, status):
+            pass
+        @classmethod
+        def _html_footer_with_repair(cls, body, text, model, entry, emit_fn=None, status_fn=None):
+            return "\n\n[HTML_FOOTER_CHECKED]"
+
+    with patch.object(router.http.client, "HTTPConnection", return_value=_FC(html_sse)), \
+         patch.object(router.northcua_harness, "socket_disconnected", return_value=False):
+        _SH()._forward("/v1/chat/completions", {"model": "fast", "stream": True, "messages": [{"role": "user", "content": "hi"}]}, {"tier": "fast", "model": router.MODELS["fast"]})
+    assert "[HTML_FOOTER_CHECKED]" in out_buf.getvalue().decode("utf-8", "replace")
+
+
 def main():
     tests = [
         test_openai_to_anthropic_tools_roundtrip,
@@ -658,6 +761,7 @@ def main():
         test_image_generation_routing_and_tool_preservation,
         test_voice_tts_routing_and_chunking,
         test_tool_call_dedup_and_loop_cut,
+        test_post_image_turn2_and_single_file_html_routing,
     ]
     for fn in tests:
         fn()
