@@ -62,7 +62,8 @@ EXPORTED_CONFIG_PREFIXES = (
 
 SECRET_KEY_NAME_RE = re.compile(
     r"(?:^|[._-])("
-    r"api_keys?|keys?|secrets?|passwords?|tokens?|client_secrets?|access_keys?|private_keys?|"
+    r"api_?keys?|keys?|secrets?|passwords?|tokens?|client_?secrets?|access_?keys?|access_?tokens?|"
+    r"refresh_?tokens?|private_?keys?|secret_?keys?|auth_?tokens?|auth_?keys?|bearer_?tokens?|"
     r"authorization|credentials?|cookie|sk"
     r")(?:$|[._-])",
     re.I,

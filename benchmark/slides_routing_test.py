@@ -326,6 +326,20 @@ def test_advanced_deck_sandbox_and_appcontainer():
             ok_zp, msg_zp = mod_adv._run_build_script(py312, work_zip, s_zip)
             assert not ok_zp and "ZIPIMPORT_RAN" not in msg_zp and ("PermissionError" in msg_zp or "Blocked" in msg_zp), msg_zp
 
+            work_dyn = sb_dir / "work_evil_dyn_exec"
+            work_dyn.mkdir()
+            s_dyn_exec = work_dyn / "build_deck.py"
+            s_dyn_exec.write_text("import matplotlib\nmatplotlib.sys.modules['builtins'].exec('open(\"exec_ran.txt\", \"w\").write(\"1\")')\n", encoding="utf-8")
+            ok_de, msg_de = mod_adv._run_build_script(py312, work_dyn, s_dyn_exec)
+            assert not ok_de and not (work_dyn / "exec_ran.txt").exists() and ("Blocked dynamic exec" in msg_de or "PermissionError" in msg_de), msg_de
+
+            work_dyn_eval = sb_dir / "work_evil_dyn_eval"
+            work_dyn_eval.mkdir()
+            s_dyn_eval = work_dyn_eval / "build_deck.py"
+            s_dyn_eval.write_text("import matplotlib\nmatplotlib.sys.modules['builtins'].eval('1+1')\n", encoding="utf-8")
+            ok_dv, msg_dv = mod_adv._run_build_script(py312, work_dyn_eval, s_dyn_eval)
+            assert not ok_dv and ("PermissionError" in msg_dv or "Blocked" in msg_dv), msg_dv
+
             work_syspath = sb_dir / "work_syspath"
             work_syspath.mkdir()
             chk_syspath = work_syspath / "build_deck.py"

@@ -788,6 +788,7 @@ import matplotlib.font_manager  # noqa: F401
 import matplotlib.pyplot  # noqa: F401
 import numpy  # noqa: F401
 from PIL import Image  # noqa: F401
+Image.preinit()
 import pptx  # noqa: F401
 import deck_kit  # noqa: F401
 
@@ -921,10 +922,8 @@ def _audit_hook(event, args):
         code_obj = args[0] if args else None
         if code_obj is not _main_code:
             cf = getattr(code_obj, "co_filename", "") or ""
-            if cf and not (cf.startswith("<") and cf.endswith(">")):
-                resolved_cf = _resolve_arg(cf)
-                if _is_under(resolved_cf, (work_real,)):
-                    raise PermissionError(f"Blocked secondary exec inside deck workspace: {resolved_cf}")
+            if not cf or cf.startswith("<") or not _is_under(_resolve_arg(cf), ro_roots):
+                raise PermissionError(f"Blocked dynamic exec inside deck sandbox: {cf or '<unknown>'}")
         return
     if event == "open":
         path_arg, mode_arg, flags_arg = args[0], args[1], args[2]

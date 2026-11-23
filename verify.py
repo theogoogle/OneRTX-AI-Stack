@@ -217,12 +217,20 @@ import setup_backup
 scrubbed = setup_backup._scrub_value(
     {
         "apiKey": "plain-secret-val",
+        "apikey": "flat-lower-secret",
+        "apikeys": ["flat-lower-1", "flat-lower-2"],
+        "clientsecret": "flat-client-sec",
+        "accesstoken": "flat-access-tok",
         "prefixedKey": "sk-" + "demo" * 6,
         "nested": {"clientSecret": "my-client-sec", "okField": "visible"},
     },
     ot_secret="ot-secret-123",
 )
 assert scrubbed["apiKey"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["apikey"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["apikeys"] == [setup_backup.REDACTED_SECRET_PLACEHOLDER, setup_backup.REDACTED_SECRET_PLACEHOLDER], scrubbed
+assert scrubbed["clientsecret"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
+assert scrubbed["accesstoken"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
 assert scrubbed["prefixedKey"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
 assert scrubbed["nested"]["clientSecret"] == setup_backup.REDACTED_SECRET_PLACEHOLDER, scrubbed
 assert scrubbed["nested"]["okField"] == "visible", scrubbed
@@ -306,7 +314,8 @@ if (gwc_dir / "google_workspace_cli.py").is_file():
         def events(self): return _FakeEvents(self._items)
     fake_items = [
         {"summary": "Private Appointment", "visibility": "private", "start": {"dateTime": "2026-11-24T09:00:00Z"}},
-        {"summary": "Confidential Job Interview", "visibility": "default", "start": {"dateTime": "2026-11-24T11:00:00Z"}},
+        {"summary": "Confidential Event", "visibility": "confidential", "start": {"dateTime": "2026-11-24T10:00:00Z"}},
+        {"summary": "Regex Job Interview", "visibility": "default", "start": {"dateTime": "2026-11-24T11:00:00Z"}},
         {"summary": "Parent Teacher Meeting", "visibility": "default", "start": {"dateTime": "2026-11-24T15:30:00Z"}},
     ]
     fake_cfg = {"calendars": {"include": [{"id": "primary", "label": "Primary"}], "exclude_private_visibility": True, "exclude_title_regex": ["interview"]}}
