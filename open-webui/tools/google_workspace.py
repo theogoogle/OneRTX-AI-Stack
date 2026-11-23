@@ -79,7 +79,7 @@ class Tools:
         __event_emitter__=None,
     ) -> str:
         """
-        List upcoming Google Calendar events across the user's configured calendars.
+        List the user's OWN personal/family Google Calendar appointments (NEVER public city/neighborhood events, concerts, or weather).
 
         :param days: Number of days ahead to fetch (1 to 90, default 7).
         :param query: Optional keyword filter (e.g. 'birthday', 'swimming', 'flight', or empty for all events).

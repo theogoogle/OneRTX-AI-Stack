@@ -37,7 +37,7 @@ FALLBACK_TOOLS: list[tuple[str, str]] = [
     ("get_market_quote", "Fetch real-time market price, period return, 52-week range, and a 300-DPI price chart for any stock, ETF, index, crypto, or currency pair."),
     ("get_youtube_transcript", "Fetch the full transcript and title/channel metadata for a YouTube video URL or 11-char ID."),
     ("inspect_slides", "MANDATORY FIRST STEP whenever a .pptx is attached or the user wants to inspect or edit slides."),
-    ("list_upcoming_events", "List upcoming Google Calendar events across the user's configured calendars."),
+    ("list_upcoming_events", "List the user's OWN personal/family Google Calendar appointments (NEVER public city/neighborhood events, concerts, or weather)."),
     ("read_email_thread", "Read the full plain-text content (including replies) of a specific Gmail thread returned by `search_emails`."),
     ("run_deep_research", "Run multi-step autonomous web research (4 complementary sub-queries, parallel full-page reading, cited synthesis on Pro, plus downloadable PDF)."),
     ("search_emails", "Search Gmail threads using Gmail search syntax or plain keywords. Returns compact metadata and `thread_id`."),
@@ -67,7 +67,8 @@ Rules for "tools" (array of matching tool names from AVAILABLE CUSTOM TOOLS belo
 - Return tools=[] whenever the user is:
   * writing/building software code, scripts, scrapers, HTML/React apps, or dashboards,
   * proofreading, rewriting, or translating pasted text, or writing a generic cold outreach/marketing email template,
-  * asking how protocols/passwords/settings work, general knowledge, or consumer retail product prices (like a console or TV).
+  * asking how protocols/passwords/settings work, general knowledge, or consumer retail product prices (like a console or TV),
+  * asking about public city/neighborhood events, things to do, concerts, weather, or news (use list_upcoming_events ONLY for the user's own calendar).
 - Follow-ups: if RECENT CHAT TOOLS is shown and the message is a short follow-up about earlier results (e.g. "read the second one", "change slide 3"), pick the appropriate follow-up tool from AVAILABLE CUSTOM TOOLS.
 
 Rules for "tier" ("fast" | "code" | "deep"):
@@ -137,6 +138,9 @@ BENCH_CASES: list[tuple[str, str | None, str, tuple[str, ...]]] = [
     ("Explain how SMTP email protocols work", None, "fast", ()),
     ("Write a cold outreach email template", None, "fast", ()),
     ("What is the price of a PS5 today?", None, "fast", ()),
+    ("what are the events around Kensington and Chelsea this weekend?", None, "fast", ()),
+    ("what are the events around Wimbledon and Putney this weekend?", None, "fast", ()),
+    ("Quels sont les événements ou expos à Lyon ce week-end ?", None, "fast", ()),
     ("Explain how photosynthesis works", None, "fast", ()),
     ("Solve: prove that for all integers n >= 1, 1^3 + 2^3 + ... + n^3 = (n(n+1)/2)^2", None, "deep", ()),
 ]

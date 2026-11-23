@@ -687,6 +687,30 @@ def test_post_image_turn2_and_single_file_html_routing():
     sys_txt = " ".join(str(m.get("content")) for m in captured["body"]["messages"] if m.get("role") == "system")
     assert "already been generated" in sys_txt and "never output JSON" in sys_txt, sys_txt
 
+    # 2b. Failed generate_image + sibling tool success must NOT trigger post_image lock
+    b_turn2_img_err_sibling_ok = {
+        "model": "auto",
+        "tools": [dict(t) for t in ow_tools],
+        "messages": [
+            {"role": "user", "content": "Generate an image of a sunlit Parisian bookshop"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {"id": "c1", "function": {"name": "generate_image", "arguments": '{"prompt":"bookshop"}'}},
+                    {"id": "c2", "function": {"name": "get_current_timestamp", "arguments": "{}"}},
+                ],
+            },
+            {"role": "tool", "tool_call_id": "c1", "content": json.dumps({"status": "error", "error": "backend failed"})},
+            {"role": "tool", "tool_call_id": "c2", "content": json.dumps({"status": "success", "timestamp": 1234567890})},
+        ],
+    }
+    captured.clear()
+    _H()._dispatch("/v1/chat/completions", "openai", b_turn2_img_err_sibling_ok, "fast", router.MODELS["fast"], False, None, [], {})
+    assert captured["body"].get("tool_choice") != "none", captured["body"]
+    err_sys_txt = " ".join(str(m.get("content")) for m in captured["body"]["messages"] if m.get("role") == "system")
+    assert "already been generated" not in err_sys_txt, err_sys_txt
+
     # 3. Direct OpenAI _forward runs _html_footer_with_repair on </html> answers without tool calls
     html_sse = (
         'data: {"id":"1","choices":[{"index":0,"delta":{"content":"<!DOCTYPE html><html><body>Hi</body></html>"},"finish_reason":null}]}\n\n'

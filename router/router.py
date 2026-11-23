@@ -425,7 +425,7 @@ KNOWN_TOOL_FALLBACK_DESCS = {
     "get_market_quote": "Fetch real-time market price, return, 52-week range, and price chart for any stock, ETF, index, crypto, or FX pair.",
     "get_youtube_transcript": "Fetch the full transcript and metadata for a YouTube video URL or 11-char ID.",
     "inspect_slides": "Inspect or read an attached .pptx presentation or template.",
-    "list_upcoming_events": "List upcoming Google Calendar events across the user's calendars.",
+    "list_upcoming_events": "List the user's OWN personal/family Google Calendar appointments (NEVER public city/neighborhood events, concerts, or weather).",
     "read_email_thread": "Read the full content (including replies) of a specific Gmail thread.",
     "run_deep_research": "Run multi-step autonomous web research with cited synthesis and downloadable PDF.",
     "search_emails": "Search Gmail threads using keywords or Gmail syntax and return matching metadata + thread_id.",
@@ -451,7 +451,8 @@ Rules for "tools" (array of matching tool names from AVAILABLE CUSTOM TOOLS belo
 - Return tools=[] whenever the user is:
   * writing/building software code, scripts, scrapers, HTML/React apps, or dashboards,
   * proofreading, rewriting, or translating pasted text, or writing a generic cold outreach/marketing email template,
-  * asking how protocols/passwords/settings work, general knowledge, or consumer retail product prices (like a console or TV).
+  * asking how protocols/passwords/settings work, general knowledge, or consumer retail product prices (like a console or TV),
+  * asking about public city/neighborhood events, things to do, concerts, weather, or news (use list_upcoming_events ONLY for the user's own calendar).
 - Follow-ups: if RECENT CHAT TOOLS is shown and the message is a short follow-up about earlier results (e.g. "read the second one", "change slide 3"), pick the appropriate follow-up tool from AVAILABLE CUSTOM TOOLS.
 
 Rules for "tier" ("fast" | "code" | "deep"):
@@ -3067,16 +3068,21 @@ class Handler(BaseHTTPRequestHandler):
                 re.I,
             ))
             tail_msgs = msgs_cur[last_u_idx + 1:] if last_u_idx is not None else []
-            saw_img_call = any(
-                m.get("role") == "assistant"
-                and any(((tc.get("function") or {}).get("name") or tc.get("name") or "") in IMAGE_GEN_TOOLS for tc in (m.get("tool_calls") or []))
+            img_call_ids = {
+                tc.get("id")
                 for m in tail_msgs
-            )
+                if m.get("role") == "assistant"
+                for tc in (m.get("tool_calls") or [])
+                if ((tc.get("function") or {}).get("name") or tc.get("name") or "") in IMAGE_GEN_TOOLS
+                and tc.get("id")
+            }
             saw_img_success = any(
-                m.get("role") == "tool" and re.search(r'"status"\s*:\s*"success"', str(m.get("content") or ""))
+                m.get("role") == "tool"
+                and m.get("tool_call_id") in img_call_ids
+                and re.search(r'"status"\s*:\s*"success"', str(m.get("content") or ""))
                 for m in tail_msgs
             )
-            post_image = bool(saw_img_call and saw_img_success and not wants_multi_img)
+            post_image = bool(img_call_ids and saw_img_success and not wants_multi_img)
             rule_parts = []
             if post_image:
                 body["tool_choice"] = "none"

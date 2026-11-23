@@ -255,6 +255,35 @@ def test_advanced_deck_sandbox_and_appcontainer():
             assert ok_run, f"Sandboxed deck build failed: {msg_ok}"
             assert (work_ok / "deck.pptx").stat().st_size > 5000
 
+            work_stdlib_pil = sb_dir / "work_stdlib_pil"
+            work_stdlib_pil.mkdir()
+            stdlib_pil_script = work_stdlib_pil / "build_deck.py"
+            stdlib_pil_script.write_text(
+                "import collections\n"
+                "import statistics\n"
+                "from PIL import Image, ImageDraw\n"
+                "from pptx import Presentation\n"
+                "from pptx.util import Inches\n"
+                "Metric = collections.namedtuple('Metric', ['name', 'val'])\n"
+                "m = Metric('Q4', 42)\n"
+                "assert m.val == 42\n"
+                "assert statistics.linear_regression([1, 2, 3], [2, 4, 6]).slope == 2.0\n"
+                "im = Image.new('RGB', (120, 80), '#1E3A5F')\n"
+                "draw = ImageDraw.Draw(im)\n"
+                "draw.rectangle([10, 10, 110, 70], fill='#D97706')\n"
+                "im.save('badge.png')\n"
+                "prs = Presentation()\n"
+                "prs.slide_width = Inches(13.333)\n"
+                "prs.slide_height = Inches(7.5)\n"
+                "s = prs.slides.add_slide(prs.slide_layouts[6])\n"
+                "s.shapes.add_picture('badge.png', Inches(1), Inches(1), width=Inches(2))\n"
+                "prs.save('deck.pptx')\n",
+                encoding="utf-8",
+            )
+            ok_spil, msg_spil = mod_adv._run_build_script(py312, work_stdlib_pil, stdlib_pil_script)
+            assert ok_spil, f"Sandbox broke stdlib statistics / PIL.ImageDraw / namedtuple: {msg_spil}"
+            assert (work_stdlib_pil / "deck.pptx").stat().st_size > 5000
+
             work_evil_env = sb_dir / "work_evil_env"
             work_evil_env.mkdir()
             evil_env = work_evil_env / "build_deck.py"
@@ -339,6 +368,18 @@ def test_advanced_deck_sandbox_and_appcontainer():
             s_dyn_eval.write_text("import matplotlib\nmatplotlib.sys.modules['builtins'].eval('1+1')\n", encoding="utf-8")
             ok_dv, msg_dv = mod_adv._run_build_script(py312, work_dyn_eval, s_dyn_eval)
             assert not ok_dv and ("PermissionError" in msg_dv or "Blocked" in msg_dv), msg_dv
+
+            for spoof_idx, spoof_expr in enumerate((
+                "import functools, matplotlib; b = matplotlib.sys.modules['builtins']; functools.partial(b.exec, 'open(\"spoof0.txt\",\"w\").write(\"1\")')()",
+                "import matplotlib; b = matplotlib.sys.modules['builtins']; b.exec(b.compile('open(\"spoof1.txt\",\"w\").write(\"1\")', '<frozen evil>', 'exec'))",
+                "import matplotlib; b = matplotlib.sys.modules['builtins']; p = matplotlib.sys.prefix + '/Lib/fake.py'; b.exec(b.compile('open(\"spoof2.txt\",\"w\").write(\"1\")', p, 'exec'))",
+            )):
+                work_spoof = sb_dir / f"work_evil_spoof_{spoof_idx}"
+                work_spoof.mkdir()
+                s_spoof = work_spoof / "build_deck.py"
+                s_spoof.write_text(spoof_expr + "\n", encoding="utf-8")
+                ok_sf, msg_sf = mod_adv._run_build_script(py312, work_spoof, s_spoof)
+                assert not ok_sf and not (work_spoof / f"spoof{spoof_idx}.txt").exists() and ("Blocked dynamic exec" in msg_sf or "PermissionError" in msg_sf), msg_sf
 
             work_syspath = sb_dir / "work_syspath"
             work_syspath.mkdir()

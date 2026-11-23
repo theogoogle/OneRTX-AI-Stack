@@ -773,7 +773,7 @@ _USER_ENV_KEYS = (
 )
 
 _SANDBOX_RUNNER = r'''
-import os, site, sys
+import collections, os, site, sys
 from pathlib import Path
 
 work_dir = Path(sys.argv[1]).resolve()
@@ -885,6 +885,14 @@ _BLOCKED_EVENTS = frozenset({
 
 source_text = script_path.read_text(encoding="utf-8")
 _main_code = compile(source_text, str(script_path), "exec")
+_getframe = sys._getframe
+_normcase = os.path.normcase
+_realpath = os.path.realpath
+_COLLECTIONS_FILE = _normcase(_realpath(getattr(collections, "__file__", "") or ""))
+_FROZEN_IMPORT_CALLERS = frozenset({
+    "<frozen importlib._bootstrap>",
+    "<frozen importlib._bootstrap_external>",
+})
 
 def _audit_hook(event, args):
     if event in _BLOCKED_EVENTS or event.startswith(("os.spawn", "os.exec", "winreg.", "ctypes.", "socket.", "shutil.")):
@@ -922,8 +930,28 @@ def _audit_hook(event, args):
         code_obj = args[0] if args else None
         if code_obj is not _main_code:
             cf = getattr(code_obj, "co_filename", "") or ""
-            if not cf or cf.startswith("<") or not _is_under(_resolve_arg(cf), ro_roots):
-                raise PermissionError(f"Blocked dynamic exec inside deck sandbox: {cf or '<unknown>'}")
+            caller_cf, caller_fn = "", ""
+            try:
+                fr = _getframe(1)
+                caller_cf = fr.f_code.co_filename or ""
+                caller_fn = fr.f_code.co_name or ""
+            except Exception:
+                pass
+            if caller_cf in _FROZEN_IMPORT_CALLERS and (
+                (cf.startswith("<frozen ") and cf.endswith(">"))
+                or (cf and not cf.startswith("<") and _is_under(_resolve_arg(cf), ro_roots))
+            ):
+                return
+            if (
+                (cf in ("<string>", "") or cf.startswith("<namedtuple_"))
+                and _COLLECTIONS_FILE
+                and caller_cf
+                and not caller_cf.startswith("<")
+                and _normcase(_realpath(caller_cf)) == _COLLECTIONS_FILE
+                and caller_fn == "namedtuple"
+            ):
+                return
+            raise PermissionError(f"Blocked dynamic exec inside deck sandbox: {cf or '<unknown>'}")
         return
     if event == "open":
         path_arg, mode_arg, flags_arg = args[0], args[1], args[2]
