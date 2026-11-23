@@ -9,6 +9,8 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import base64
+import functools
 import html
 import json
 import re
@@ -20,6 +22,23 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+_INTER_WOFF2_PATH = Path.home() / "AI" / "family-table" / "assets" / "fonts" / "inter-ui-latin.woff2"
+
+
+@functools.lru_cache(maxsize=1)
+def _inter_font_face_css() -> str:
+    try:
+        if _INTER_WOFF2_PATH.is_file():
+            b64 = base64.b64encode(_INTER_WOFF2_PATH.read_bytes()).decode("ascii")
+            return (
+                '@font-face{font-family:"Inter";'
+                f'src:url("data:font/woff2;base64,{b64}") format("woff2");'
+                'font-weight:400 700;font-style:normal;font-display:swap;}\n'
+            )
+    except Exception:
+        pass
+    return ""
 
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
@@ -238,37 +257,37 @@ def _safe_json_for_script(obj: Any) -> str:
 _CARD_BASE_CSS = """
   :root {
     color-scheme: dark light;
-    --bg: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(23, 31, 50, 0.92));
-    --surface: rgba(30, 41, 59, 0.65);
-    --border: rgba(148, 163, 184, 0.18);
-    --text: #f8fafc;
-    --muted: #94a3b8;
-    --divider: rgba(148, 163, 184, 0.12);
-    --grid: rgba(148, 163, 184, 0.12);
-    --pill-bg: rgba(148, 163, 184, 0.12);
-    --pill-active-bg: #f8fafc;
-    --pill-active-fg: #0f172a;
-    --tip-bg: rgba(15, 23, 42, 0.95);
-    --tip-border: rgba(148, 163, 184, 0.28);
+    --bg: rgba(29, 29, 29, 0.90);
+    --surface: rgba(255, 255, 255, 0.045);
+    --border: rgba(255, 255, 255, 0.09);
+    --text: #ececec;
+    --muted: #9b9b9b;
+    --divider: rgba(255, 255, 255, 0.07);
+    --grid: rgba(255, 255, 255, 0.07);
+    --pill-bg: rgba(255, 255, 255, 0.06);
+    --pill-active-bg: rgba(255, 255, 255, 0.14);
+    --pill-active-fg: #ffffff;
+    --tip-bg: rgba(23, 23, 23, 0.96);
+    --tip-border: rgba(255, 255, 255, 0.14);
     --pos: #10b981;
-    --pos-bg: rgba(16, 185, 129, 0.16);
+    --pos-bg: rgba(16, 185, 129, 0.14);
     --neg: #f43f5e;
-    --neg-bg: rgba(244, 63, 94, 0.16);
+    --neg-bg: rgba(244, 63, 94, 0.14);
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.96));
-      --surface: rgba(226, 232, 240, 0.55);
-      --border: rgba(15, 23, 42, 0.11);
-      --text: #0f172a;
-      --muted: #64748b;
-      --divider: rgba(15, 23, 42, 0.08);
-      --grid: rgba(15, 23, 42, 0.08);
-      --pill-bg: rgba(15, 23, 42, 0.06);
-      --pill-active-bg: #0f172a;
-      --pill-active-fg: #f8fafc;
+      --bg: #fafafa;
+      --surface: rgba(0, 0, 0, 0.04);
+      --border: rgba(0, 0, 0, 0.09);
+      --text: #171717;
+      --muted: #666666;
+      --divider: rgba(0, 0, 0, 0.07);
+      --grid: rgba(0, 0, 0, 0.07);
+      --pill-bg: rgba(0, 0, 0, 0.05);
+      --pill-active-bg: rgba(0, 0, 0, 0.10);
+      --pill-active-fg: #0d0d0d;
       --tip-bg: rgba(255, 255, 255, 0.97);
-      --tip-border: rgba(15, 23, 42, 0.16);
+      --tip-border: rgba(0, 0, 0, 0.14);
       --pos: #059669;
       --pos-bg: rgba(5, 150, 105, 0.12);
       --neg: #e11d48;
@@ -278,7 +297,7 @@ _CARD_BASE_CSS = """
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
@@ -289,7 +308,7 @@ _CARD_BASE_CSS = """
     border-radius: 16px;
     padding: 15px 18px 13px;
     margin: 2px 0 6px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.20);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
     user-select: none;
   }
   .top {
@@ -526,7 +545,7 @@ def _wrap_chart_card_html(title: str, body_html: str, payload: dict[str, Any], s
         "</script>\n</body>\n</html>"
     )
     return (
-        doc.replace("__CSS__", _CARD_BASE_CSS)
+        doc.replace("__CSS__", _inter_font_face_css() + _CARD_BASE_CSS)
         .replace("__BODY__", body_html.replace("__TABS__", tabs_html))
         .replace("__DATA__", _safe_json_for_script(payload))
         .replace("__COMMON_JS__", _CHART_COMMON_JS)
@@ -577,7 +596,7 @@ def render_quote_html_card(payload: dict[str, Any]) -> str:
       <path id="area-path" fill="url(#area-grad)"/>
       <path id="line-path" fill="none" stroke="#10b981" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
       <line id="crosshair" y1="12" y2="198" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" opacity="0"/>
-      <circle id="focus-dot" r="4.5" stroke="#0f172a" stroke-width="2" opacity="0"/>
+      <circle id="focus-dot" r="4.5" stroke="#1d1d1d" stroke-width="2" opacity="0"/>
     </svg>
     <div class="tip" id="hover-tip"></div>
   </div>
@@ -981,7 +1000,7 @@ def render_compare_html_card(payload: dict[str, Any]) -> str:
       if (idx === 0) snapTs = bestPt[0];
       var col = PALETTE[idx % PALETTE.length];
       var dx = curState.px(bestPt[0]).toFixed(1), dy = curState.py(bestPt[2]).toFixed(1);
-      dotsHtml += '<circle cx="' + dx + '" cy="' + dy + '" r="4" fill="' + col + '" stroke="#0f172a" stroke-width="1.8"/>';
+      dotsHtml += '<circle cx="' + dx + '" cy="' + dy + '" r="4" fill="' + col + '" stroke="#1d1d1d" stroke-width="1.8"/>';
       hoverRets[idx] = bestPt[2];
       tipRows += '<div class="tip-row"><span><span style="color:' + col + '">●</span> ' + escHtml(s.symbol) + '</span>' +
         '<strong>' + escHtml(fmtPct(bestPt[2])) + ' <span style="font-weight:500;color:var(--muted)">(' + escHtml(fmtPrice(bestPt[1], s.currency)) + ')</span></strong></div>';

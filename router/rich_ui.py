@@ -2,9 +2,29 @@
 
 Standard library only. Safe under `pythonw -I` (no external packages, all dynamic text HTML-escaped).
 """
+import base64
 import difflib
+import functools
 import html
 import re
+from pathlib import Path
+
+_INTER_WOFF2_PATH = Path.home() / "AI" / "family-table" / "assets" / "fonts" / "inter-ui-latin.woff2"
+
+
+@functools.lru_cache(maxsize=1)
+def _inter_font_face_css() -> str:
+    try:
+        if _INTER_WOFF2_PATH.is_file():
+            b64 = base64.b64encode(_INTER_WOFF2_PATH.read_bytes()).decode("ascii")
+            return (
+                '@font-face{font-family:"Inter";'
+                f'src:url("data:font/woff2;base64,{b64}") format("woff2");'
+                'font-weight:400 700;font-style:normal;font-display:swap;}\n'
+            )
+    except Exception:
+        pass
+    return ""
 
 MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*((?:https?|photo)://[^\s)]+)", re.I)
 PHOTO_PLACEHOLDER_RE = re.compile(r"photo://(\d+)", re.I)
@@ -367,33 +387,34 @@ def build_weather_card_html(meta: dict) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
-  :root {{
+{_inter_font_face_css()}  :root {{
     color-scheme: dark light;
-    --bg: linear-gradient(145deg, rgba(15, 23, 42, 0.94), rgba(23, 31, 50, 0.90));
-    --border: rgba(148, 163, 184, 0.18);
-    --text: #f1f5f9;
-    --muted: #94a3b8;
-    --track: rgba(148, 163, 184, 0.18);
-    --divider: rgba(148, 163, 184, 0.11);
+    --bg: rgba(29, 29, 29, 0.90);
+    --border: rgba(255, 255, 255, 0.09);
+    --text: #ececec;
+    --muted: #9b9b9b;
+    --track: rgba(255, 255, 255, 0.09);
+    --divider: rgba(255, 255, 255, 0.07);
     --rain: #38bdf8;
   }}
   @media (prefers-color-scheme: light) {{
     :root {{
-      --bg: linear-gradient(145deg, rgba(248, 250, 252, 0.97), rgba(241, 245, 249, 0.95));
-      --border: rgba(15, 23, 42, 0.10);
-      --text: #0f172a;
-      --muted: #64748b;
-      --track: rgba(15, 23, 42, 0.10);
-      --divider: rgba(15, 23, 42, 0.07);
+      --bg: #fafafa;
+      --border: rgba(0, 0, 0, 0.09);
+      --text: #171717;
+      --muted: #666666;
+      --track: rgba(0, 0, 0, 0.09);
+      --divider: rgba(0, 0, 0, 0.07);
       --rain: #0284c7;
     }}
   }}
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   html, body {{
     background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
   }}
   .card {{
     background: var(--bg);
@@ -401,7 +422,7 @@ def build_weather_card_html(meta: dict) -> str:
     border-radius: 16px;
     padding: 15px 18px 13px;
     margin: 2px 0 6px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
   }}
   .hero {{
     display: flex;

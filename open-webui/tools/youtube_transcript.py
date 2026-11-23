@@ -7,14 +7,34 @@ license: MIT
 """
 
 import asyncio
+import base64
+import functools
 import html
 import json
 import re
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+_INTER_WOFF2_PATH = Path.home() / "AI" / "family-table" / "assets" / "fonts" / "inter-ui-latin.woff2"
+
+
+@functools.lru_cache(maxsize=1)
+def _inter_font_face_css() -> str:
+    try:
+        if _INTER_WOFF2_PATH.is_file():
+            b64 = base64.b64encode(_INTER_WOFF2_PATH.read_bytes()).decode("ascii")
+            return (
+                '@font-face{font-family:"Inter";'
+                f'src:url("data:font/woff2;base64,{b64}") format("woff2");'
+                'font-weight:400 700;font-style:normal;font-display:swap;}\n'
+            )
+    except Exception:
+        pass
+    return ""
 
 _YT_ID_RE = re.compile(
     r"(?:youtube\.com/(?:watch\?(?:[^#]*&)?v=|shorts/|live/|embed/)|youtu\.be/)([A-Za-z0-9_-]{11})\b"
@@ -203,39 +223,49 @@ def render_transcript_html_card(data: dict) -> str:
     css = """
   :root {
     color-scheme: dark light;
-    --bg: linear-gradient(145deg, rgba(15, 23, 42, 0.96), rgba(23, 31, 50, 0.92));
-    --surface: rgba(30, 41, 59, 0.72);
-    --border: rgba(148, 163, 184, 0.18);
-    --text: #f1f5f9;
-    --muted: #94a3b8;
-    --divider: rgba(148, 163, 184, 0.12);
-    --chip-bg: rgba(56, 189, 248, 0.13);
-    --chip-fg: #38bdf8;
-    --chip-hover: rgba(56, 189, 248, 0.24);
-    --btn-bg: rgba(148, 163, 184, 0.12);
-    --btn-hover: rgba(148, 163, 184, 0.22);
-    --btn-active-bg: #f8fafc;
-    --btn-active-fg: #0f172a;
-    --mark-bg: rgba(250, 204, 21, 0.32);
+    --bg: rgba(29, 29, 29, 0.90);
+    --surface: rgba(255, 255, 255, 0.045);
+    --border: rgba(255, 255, 255, 0.09);
+    --text: #ececec;
+    --muted: #9b9b9b;
+    --divider: rgba(255, 255, 255, 0.07);
+    --chip-bg: rgba(255, 255, 255, 0.07);
+    --chip-fg: #d4d4d4;
+    --chip-hover: rgba(255, 255, 255, 0.14);
+    --btn-bg: rgba(255, 255, 255, 0.045);
+    --btn-hover: rgba(255, 255, 255, 0.10);
+    --btn-active-bg: rgba(255, 255, 255, 0.14);
+    --btn-active-fg: #ffffff;
+    --btn-active-border: rgba(255, 255, 255, 0.18);
+    --focus-border: rgba(255, 255, 255, 0.28);
+    --thumb-bg: rgba(255, 255, 255, 0.06);
+    --scroll-thumb: rgba(255, 255, 255, 0.16);
+    --scroll-thumb-hover: rgba(255, 255, 255, 0.28);
+    --mark-bg: rgba(250, 204, 21, 0.28);
     --mark-fg: #fef08a;
     --ok: #10b981;
   }
   @media (prefers-color-scheme: light) {
     :root {
-      --bg: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(241, 245, 249, 0.96));
-      --surface: rgba(226, 232, 240, 0.55);
-      --border: rgba(15, 23, 42, 0.11);
-      --text: #0f172a;
-      --muted: #64748b;
-      --divider: rgba(15, 23, 42, 0.08);
-      --chip-bg: rgba(2, 132, 199, 0.10);
-      --chip-fg: #0369a1;
-      --chip-hover: rgba(2, 132, 199, 0.18);
-      --btn-bg: rgba(15, 23, 42, 0.06);
-      --btn-hover: rgba(15, 23, 42, 0.12);
-      --btn-active-bg: #0f172a;
-      --btn-active-fg: #f8fafc;
-      --mark-bg: rgba(250, 204, 21, 0.48);
+      --bg: #fafafa;
+      --surface: rgba(0, 0, 0, 0.04);
+      --border: rgba(0, 0, 0, 0.09);
+      --text: #171717;
+      --muted: #666666;
+      --divider: rgba(0, 0, 0, 0.07);
+      --chip-bg: rgba(0, 0, 0, 0.06);
+      --chip-fg: #404040;
+      --chip-hover: rgba(0, 0, 0, 0.12);
+      --btn-bg: rgba(0, 0, 0, 0.04);
+      --btn-hover: rgba(0, 0, 0, 0.09);
+      --btn-active-bg: rgba(0, 0, 0, 0.10);
+      --btn-active-fg: #0d0d0d;
+      --btn-active-border: rgba(0, 0, 0, 0.16);
+      --focus-border: rgba(0, 0, 0, 0.25);
+      --thumb-bg: rgba(0, 0, 0, 0.06);
+      --scroll-thumb: rgba(0, 0, 0, 0.16);
+      --scroll-thumb-hover: rgba(0, 0, 0, 0.28);
+      --mark-bg: rgba(250, 204, 21, 0.45);
       --mark-fg: #713f12;
       --ok: #059669;
     }
@@ -243,7 +273,7 @@ def render_transcript_html_card(data: dict) -> str:
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     background: transparent;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     color: var(--text);
     overflow: hidden;
     -webkit-font-smoothing: antialiased;
@@ -254,7 +284,7 @@ def render_transcript_html_card(data: dict) -> str:
     border-radius: 16px;
     padding: 15px 18px 13px;
     margin: 2px 0 6px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.20);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.16);
   }
   .head {
     display: flex;
@@ -269,7 +299,7 @@ def render_transcript_html_card(data: dict) -> str:
     height: 48px;
     border-radius: 9px;
     overflow: hidden;
-    background: #1e293b;
+    background: var(--thumb-bg);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -289,10 +319,10 @@ def render_transcript_html_card(data: dict) -> str:
   .yt-title {
     display: block;
     font-size: 15px;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--text);
     text-decoration: none;
-    line-height: 1.3;
+    line-height: 1.35;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -313,7 +343,7 @@ def render_transcript_html_card(data: dict) -> str:
     padding: 1.5px 7px;
     border-radius: 999px;
     background: var(--btn-bg);
-    font-weight: 600;
+    font-weight: 500;
     font-size: 11px;
   }
   .toolbar {
@@ -345,27 +375,27 @@ def render_transcript_html_card(data: dict) -> str:
     font-size: 12.5px;
     outline: none;
   }
-  #yt-search:focus { border-color: var(--chip-fg); }
+  #yt-search:focus { border-color: var(--focus-border); }
   .match-count { font-size: 11px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
   .tool-btn {
     border: 1px solid var(--border);
     background: var(--btn-bg);
-    color: var(--text);
+    color: var(--muted);
     font: inherit;
     font-size: 11.5px;
-    font-weight: 600;
+    font-weight: 550;
     padding: 5px 9px;
     border-radius: 8px;
     cursor: pointer;
-    transition: background-color 0.14s ease, color 0.14s ease;
+    transition: background-color 0.14s ease, color 0.14s ease, border-color 0.14s ease;
     white-space: nowrap;
   }
-  .tool-btn:hover { background: var(--btn-hover); }
+  .tool-btn:hover { background: var(--btn-hover); color: var(--text); }
   .tool-btn[aria-pressed="true"] {
     background: var(--btn-active-bg);
     color: var(--btn-active-fg);
-    border-color: transparent;
+    border-color: var(--btn-active-border);
   }
   .tool-btn.copied { color: var(--ok); border-color: var(--ok); }
   .body-scroll {
@@ -374,30 +404,35 @@ def render_transcript_html_card(data: dict) -> str:
     overflow-y: auto;
     padding-right: 6px;
     scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
   }
+  .body-scroll::-webkit-scrollbar { width: 6px; }
+  .body-scroll::-webkit-scrollbar-track { background: transparent; }
+  .body-scroll::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; }
+  .body-scroll::-webkit-scrollbar-thumb:hover { background: var(--scroll-thumb-hover); }
   .body-scroll.expanded { max-height: none; overflow-y: visible; padding-right: 0; }
-  .yt-body { display: flex; flex-direction: column; gap: 11px; }
+  .yt-body { display: flex; flex-direction: column; gap: 12px; }
   .para {
     display: flex;
     align-items: flex-start;
     gap: 10px;
-    font-size: 13.5px;
-    line-height: 1.62;
+    font-size: 14px;
+    line-height: 1.65;
   }
   .ts-chip {
     flex-shrink: 0;
-    margin-top: 2px;
+    margin-top: 3px;
     padding: 2px 7px;
     border-radius: 6px;
     background: var(--chip-bg);
     color: var(--chip-fg);
     text-decoration: none;
     font-size: 11px;
-    font-weight: 700;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
-    transition: background-color 0.12s ease;
+    transition: background-color 0.12s ease, color 0.12s ease;
   }
-  .ts-chip:hover { background: var(--chip-hover); }
+  .ts-chip:hover { background: var(--chip-hover); color: var(--text); }
   .body-scroll.hide-ts .ts-chip { display: none; }
   .para-txt { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
   mark { background: var(--mark-bg); color: var(--mark-fg); border-radius: 3px; padding: 0 2px; }
@@ -405,7 +440,7 @@ def render_transcript_html_card(data: dict) -> str:
   @media (max-width: 520px) {
     .card { padding: 13px 13px 11px; }
     .thumb-box { width: 68px; height: 40px; }
-    .para { gap: 8px; font-size: 13px; }
+    .para { gap: 8px; font-size: 13.5px; }
   }
 """
 
@@ -584,7 +619,7 @@ def render_transcript_html_card(data: dict) -> str:
         "</script>\n</body>\n</html>"
     )
     return (
-        doc.replace("__CSS__", css)
+        doc.replace("__CSS__", _inter_font_face_css() + css)
         .replace("__DATA__", _safe_json_for_script(payload))
         .replace("__JS__", js)
     )
