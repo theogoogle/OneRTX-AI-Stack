@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv*/
+venv/
+
+# Node / Playwright
+node_modules/
+playwright-profile*/
+output-headed/
+output-headless/
+
+# Environment, secrets & private configs
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+.webui_secret_key
+secrets/
+*_api_key*.txt
+*secret*.json
+*credential*.json
+google_client_secret*.json
+google_token*.json
+family-table/config.json
+family.md
+ideas.md
+day-night.json
+
+# Runtime DBs, logs & user outputs
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+open-webui/data/
+*.log
+*.log.*
+last_request_*.json
+token-usage.csv
+web_usage.json
+generated/
+models/
+cache/
+editions/
+screenshots/
+projects/
+northcua-harness/logs/
+northcua-harness/*.yaml
+!northcua-harness/*.example.yaml
+voice-tts/voices/
+config-backups/
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

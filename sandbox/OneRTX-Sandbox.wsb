@@ -1,0 +1,14 @@
+<Configuration>
+  <VGpu>Enable</VGpu>
+  <Networking>Enable</Networking>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>..</HostFolder>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\OneRTX-AI-Stack</SandboxFolder>
+      <ReadOnly>true</ReadOnly>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>powershell.exe -NoExit -Command "Set-Location C:\Users\WDAGUtilityAccount\Desktop\OneRTX-AI-Stack; Write-Host 'Ready to test clean install: .\install.ps1 -WithPowerTools -SkipModels -NonInteractive'"</Command>
+  </LogonCommand>
+</Configuration>

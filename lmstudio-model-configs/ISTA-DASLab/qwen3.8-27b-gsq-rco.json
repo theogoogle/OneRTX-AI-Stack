@@ -1,0 +1,95 @@
+{
+  "preset": "",
+  "operation": {
+    "fields": [
+      {
+        "key": "llm.prediction.temperature",
+        "value": 1.0
+      },
+      {
+        "key": "llm.prediction.topPSampling",
+        "value": {
+          "checked": true,
+          "value": 0.95
+        }
+      },
+      {
+        "key": "llm.prediction.topKSampling",
+        "value": 20
+      },
+      {
+        "key": "llm.prediction.minPSampling",
+        "value": {
+          "checked": true,
+          "value": 0
+        }
+      },
+      {
+        "key": "llm.prediction.llama.presencePenalty",
+        "value": {
+          "checked": true,
+          "value": 0
+        }
+      },
+      {
+        "key": "llm.prediction.repeatPenalty",
+        "value": {
+          "checked": false,
+          "value": 1.0
+        }
+      }
+    ]
+  },
+  "load": {
+    "fields": [
+      {
+        "key": "llm.load.contextLength",
+        "value": 65536
+      },
+      {
+        "key": "llm.load.llama.acceleration.offloadRatio",
+        "value": 1
+      },
+      {
+        "key": "llm.load.numParallelSessions",
+        "value": 1
+      },
+      {
+        "key": "llm.load.llama.cpuThreadPoolSize",
+        "value": 8
+      },
+      {
+        "key": "llm.load.llama.kCacheQuantizationType",
+        "value": {
+          "checked": true,
+          "value": "q4_0"
+        }
+      },
+      {
+        "key": "llm.load.llama.vCacheQuantizationType",
+        "value": {
+          "checked": true,
+          "value": "q4_0"
+        }
+      },
+      {
+        "key": "llm.load.speculativeDecoding.draftMtp",
+        "value": false
+      },
+      {
+        "key": "llm.load.llama.argumentsOverride",
+        "value": {
+          "enabled": true,
+          "disabledParameters": [],
+          "excludeAllConfig": false,
+          "overrideParameters": [
+            {
+              "key": "--override-tensor",
+              "value": "blk\\.(5|16|21|24|28|35|36|37|38|39|40|42|44|47|49|50|51|52|53|54|55|56|57|58|59|60|61|63)\\.ffn_down\\.weight=CPU,blk\\.(26|27|34|36|37|40|42|43|44|57|58|62|63)\\.ffn_up\\.weight=CPU,blk\\.(28|37|39|40|43|47|48|50|52|53|54|57|58|59|60|61|62|63)\\.ffn_gate\\.weight=CPU"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

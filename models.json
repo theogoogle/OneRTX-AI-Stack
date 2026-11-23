@@ -1,0 +1,92 @@
+{
+  "models": [
+    {
+      "id": "gemma-4-12b-it-qat",
+      "hf_repo": "unsloth/gemma-4-12B-it-qat-GGUF",
+      "file": "gemma-4-12B-it-qat-UD-Q4_K_XL.gguf",
+      "size_gb": 6.93,
+      "module": "core",
+      "tier": "fast",
+      "placement": "GPU",
+      "context": 196608,
+      "notes": "Flash GPU: everyday chat, vision, Vision QA, web-grounded answers (~53-55 tok/s on 12 GB RTX GPU)"
+    },
+    {
+      "id": "qwen3.8-27b-gsq-rco",
+      "hf_repo": "ISTA-DASLab/Qwen3.8-27B-GSQ-RCO-GGUF",
+      "file": "Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf",
+      "size_gb": 12.12,
+      "module": "core",
+      "tier": "think",
+      "placement": "Hybrid GPU/CPU",
+      "context": 65536,
+      "notes": "Coding / Planning: single-file apps, logic, Open Code & Claude Code primary coder (~12.3 tok/s)"
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "hf_repo": "unsloth/Qwen3.6-35B-A3B-GGUF",
+      "file": "Qwen3.6-35B-A3B-UD-Q4_K_S.gguf",
+      "size_gb": 22.68,
+      "module": "core",
+      "tier": "deep",
+      "placement": "Hybrid GPU/CPU MoE",
+      "context": 262144,
+      "notes": "Pro tier: complex reasoning, 3D simulations, power-tool orchestration, long-context overflow (~45-50 tok/s)"
+    },
+    {
+      "id": "qwen3.5-4b",
+      "hf_repo": "unsloth/Qwen3.5-4B-GGUF",
+      "file": "Qwen3.5-4B-UD-Q4_K_XL.gguf",
+      "size_gb": 4.25,
+      "module": "core",
+      "tier": "flash",
+      "placement": "CPU (always loaded)",
+      "context": 32768,
+      "notes": "Dynamic semantic tool router (50/50), web-search classifier (50/50), GPU-busy chat fallback, memory extractor"
+    },
+    {
+      "id": "lfm3-1.7b",
+      "hf_repo": "lmstudio-community/LFM3-1.7B-GGUF",
+      "file": "LFM3-1.7B-Q8_0.gguf",
+      "size_gb": 1.85,
+      "module": "core",
+      "tier": "background",
+      "placement": "CPU (always loaded)",
+      "context": 16384,
+      "notes": "Housekeeping (titles, tags, follow-ups), 2-axis coding classifier & fallback labeller"
+    },
+    {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "hf_repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
+      "file": "nomic-embed-text-v1.5.Q4_K_M.gguf",
+      "size_gb": 0.08,
+      "module": "core",
+      "tier": "embed",
+      "placement": "CPU/GPU",
+      "context": 8192,
+      "notes": "Optional local embeddings for Open WebUI knowledge bases"
+    },
+    {
+      "id": "northcua-nano",
+      "hf_repo": "mradermacher/NorthCUA-Nano-GGUF",
+      "file": "NorthCUA-Nano.Q4_K_S.gguf",
+      "size_gb": 6.27,
+      "module": "computer_use",
+      "tier": "screen",
+      "placement": "GPU (~1.5 GB vision headroom)",
+      "context": 131072,
+      "notes": "Computer Use: Playwright browser control & Windows 11 desktop control (~73 tok/s)"
+    },
+    {
+      "id": "qwen3.5-4b-3d-coder",
+      "hf_repo": "ccore/Qwen3.5-4B-3D-Coder",
+      "file": "Qwen3.5-4B-3D-Coder-Q8_0.gguf",
+      "size_gb": 5.16,
+      "module": "coding_agents",
+      "tier": "3d",
+      "placement": "GPU",
+      "context": 131072,
+      "notes": "Dedicated Three.js / WebGL 3D scene generator & scene3d MCP"
+    }
+  ]
+}

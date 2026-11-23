@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Podcast Voice Studio (Local)</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0b1120; --card:#111827; --card2:#1e293b; --border:#334155;
+    --fg:#f8fafc; --muted:#94a3b8; --accent:#38bdf8; --ok:#34d399; --warn:#fbbf24; --bad:#f87171;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px 16px 64px; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  main { max-width:920px; margin:0 auto; display:grid; gap:18px; }
+  header { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+  h1 { margin:0 0 4px; font-size:1.55rem; }
+  h2 { margin:0 0 10px; font-size:1.12rem; }
+  p.sub { margin:0; color:var(--muted); font-size:0.92rem; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px; display:grid; gap:12px; }
+  label { display:grid; gap:6px; font-size:0.88rem; color:var(--muted); }
+  input[type=text], select, textarea {
+    width:100%; background:#0f172a; color:var(--fg); border:1px solid var(--border);
+    border-radius:8px; padding:9px 11px; font:inherit;
+  }
+  textarea { min-height:110px; resize:vertical; line-height:1.45; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  button, .btn {
+    border:1px solid var(--border); background:var(--card2); color:var(--fg);
+    border-radius:8px; padding:8px 14px; font:inherit; font-size:0.9rem; font-weight:600;
+    cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px;
+  }
+  button.primary, .btn.primary { background:var(--accent); color:#082f49; border-color:var(--accent); }
+  button.danger { color:var(--bad); }
+  button:disabled { opacity:0.5; cursor:not-allowed; }
+  .pill { display:inline-block; padding:3px 9px; border-radius:999px; font-size:0.78rem; border:1px solid var(--border); background:#0f172a; color:var(--muted); }
+  .pill.ok { color:var(--ok); border-color:#065f46; }
+  .pill.warn { color:var(--warn); border-color:#78350f; }
+  .voice-item { background:#0f172a; border:1px solid var(--border); border-radius:10px; padding:12px; display:grid; gap:8px; }
+  audio { width:100%; height:36px; }
+  pre.log { margin:0; background:#020617; border:1px solid var(--border); border-radius:8px; padding:10px; font-size:0.84rem; color:#cbd5e1; white-space:pre-wrap; max-height:220px; overflow:auto; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>🎙️ Podcast Voice Studio</h1>
+      <p class="sub">Local Qwen3-TTS (Apache 2.0) &amp; Chatterbox Multilingual (MIT) voice cloning for EN &amp; FR stories.</p>
+    </div>
+    <div class="row">
+      <span id="gpu-pill" class="pill">Checking status...</span>
+      <button id="unload-btn" type="button">Free VRAM</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <section class="card">
+      <h2>1. Add Your Voice Clip (~10s EN or FR)</h2>
+      <p class="sub">Speak warmly in a quiet room as if reading a bedtime story. Adding the exact transcript makes Qwen3-TTS cloning noticeably sharper.</p>
+      <div class="row">
+        <label style="flex:1">Profile name
+          <input id="v-name" type="text" value="my-voice-en" placeholder="e.g. my-voice-en or my-voice-fr">
+        </label>
+        <label style="width:120px">Language
+          <select id="v-lang">
+            <option value="en">English (en)</option>
+            <option value="fr">French (fr)</option>
+          </select>
+        </label>
+      </div>
+      <label>Exact words spoken in the clip (recommended for Qwen3-TTS)
+        <textarea id="v-text" style="min-height:64px" placeholder="Once upon a time, beneath a silver moon, a curious little fox tiptoed into the quiet woods."></textarea>
+      </label>
+      <div class="row">
+        <button id="rec-btn" type="button" class="primary">Record Mic</button>
+        <span id="rec-status" class="sub"></span>
+        <input id="v-file" type="file" accept="audio/*" style="max-width:230px">
+      </div>
+      <audio id="rec-preview" controls style="display:none"></audio>
+      <div class="row">
+        <button id="save-voice-btn" type="button" class="primary" disabled>Save Voice Clip</button>
+        <span id="save-status" class="sub"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. Default Settings &amp; Saved Voices</h2>
+      <div class="row">
+        <label style="flex:1">Default Engine (when pasting in Open WebUI)
+          <select id="cfg-engine">
+            <option value="qwen3">Qwen3-TTS 1.7B only (Apache 2.0)</option>
+            <option value="both">Both (Qwen3-TTS + Chatterbox A/B)</option>
+            <option value="chatterbox">Chatterbox Multilingual only (MIT)</option>
+          </select>
+        </label>
+        <label style="width:155px">Chatterbox expressiveness
+          <input id="cfg-exag" type="number" min="0.2" max="1.1" step="0.05" value="0.55">
+        </label>
+      </div>
+      <div class="row">
+        <button id="save-cfg-btn" type="button">Save Defaults</button>
+        <span id="cfg-status" class="sub"></span>
+      </div>
+      <div id="voices-list" style="display:grid; gap:10px;">Loading voices...</div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>3. Quick Story Test / Direct Narration</h2>
+    <div class="row">
+      <label style="width:170px">Language
+        <select id="n-lang">
+          <option value="auto">Auto-detect (EN / FR)</option>
+          <option value="en">English (en)</option>
+          <option value="fr">French (fr)</option>
+        </select>
+      </label>
+      <label style="flex:1">Engine
+        <select id="n-engine">
+          <option value="">Use default</option>
+          <option value="both">Compare Both (Qwen3-TTS + Chatterbox)</option>
+          <option value="qwen3">Qwen3-TTS 1.7B only</option>
+          <option value="chatterbox">Chatterbox Multilingual only</option>
+        </select>
+      </label>
+      <label style="flex:1">Voice profile
+        <select id="n-voice"><option value="">Auto by language</option></select>
+      </label>
+    </div>
+    <textarea id="n-text" placeholder="Paste your English or French children's story here..."></textarea>
+    <div class="row">
+      <button id="narrate-btn" type="button" class="primary">Generate Story Audio</button>
+      <span id="narrate-link"></span>
+    </div>
+    <pre id="narrate-log" class="log" style="display:none"></pre>
+  </section>
+</main>
+<script>
+let pendingBlob = null;
+let mediaRec = null;
+let recChunks = [];
+let recTimer = null;
+let recSec = 0;
+
+function el(tag, attrs, text) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === 'className') n.className = v;
+    else n.setAttribute(k, v);
+  }
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+async function refreshState() {
+  const r = await fetch('/health');
+  const h = await r.json();
+  const pill = document.getElementById('gpu-pill');
+  pill.textContent = h.active_engine ? ('GPU loaded: ' + h.active_engine) : 'GPU idle';
+  pill.className = 'pill ' + (h.active_engine ? 'warn' : 'ok');
+
+  const cfg = h.config || {};
+  document.getElementById('cfg-engine').value = cfg.default_engine || 'qwen3';
+  document.getElementById('cfg-exag').value = cfg.exaggeration ?? 0.55;
+
+  const list = document.getElementById('voices-list');
+  const sel = document.getElementById('n-voice');
+  list.textContent = '';
+  sel.textContent = '';
+  sel.appendChild(el('option', { value: '' }, 'Auto by language'));
+
+  if (!h.voices || !h.voices.length) {
+    list.appendChild(el('p', { className: 'sub' }, 'No voice clips saved yet. Record or upload one on the left.'));
+    return;
+  }
+  for (const v of h.voices) {
+    sel.appendChild(el('option', { value: v.name }, v.name));
+    const card = el('div', { className: 'voice-item' });
+    const top = el('div', { className: 'row' });
+    top.appendChild(el('strong', {}, v.name));
+    if (v.is_default_en) top.appendChild(el('span', { className: 'pill ok' }, 'EN default'));
+    if (v.is_default_fr) top.appendChild(el('span', { className: 'pill ok' }, 'FR default'));
+    top.appendChild(el('span', { className: 'pill' }, v.has_transcript ? 'ICL transcript OK' : 'No transcript (x-vec only)'));
+    card.appendChild(top);
+    if (v.transcript) card.appendChild(el('div', { className: 'sub' }, '"' + v.transcript + '"'));
+    const aud = el('audio', { controls: '', src: '/voices/' + encodeURIComponent(v.name) + '.wav?t=' + Date.now() });
+    card.appendChild(aud);
+    const btns = el('div', { className: 'row' });
+    const bEn = el('button', { type: 'button' }, 'Set EN Default');
+    bEn.onclick = () => setDefault('default_en', v.name);
+    const bFr = el('button', { type: 'button' }, 'Set FR Default');
+    bFr.onclick = () => setDefault('default_fr', v.name);
+    const bDel = el('button', { type: 'button', className: 'danger' }, 'Delete');
+    bDel.onclick = async () => {
+      await fetch('/voices/' + encodeURIComponent(v.name), { method: 'DELETE' });
+      refreshState();
+    };
+    btns.append(bEn, bFr, bDel);
+    card.appendChild(btns);
+    list.appendChild(card);
+  }
+}
+
+async function setDefault(key, name) {
+  await fetch('/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ [key]: name }),
+  });
+  refreshState();
+}
+
+document.getElementById('save-cfg-btn').onclick = async () => {
+  const body = {
+    default_engine: document.getElementById('cfg-engine').value,
+    exaggeration: parseFloat(document.getElementById('cfg-exag').value || '0.55'),
+  };
+  const r = await fetch('/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  document.getElementById('cfg-status').textContent = r.ok ? 'Saved.' : 'Save failed.';
+  refreshState();
+};
+
+document.getElementById('unload-btn').onclick = async () => {
+  await fetch('/unload', { method: 'POST' });
+  refreshState();
+};
+
+document.getElementById('v-lang').onchange = (e) => {
+  const n = document.getElementById('v-name');
+  if (n.value === 'my-voice-en' || n.value === 'my-voice-fr' || !n.value) {
+    n.value = e.target.value === 'fr' ? 'my-voice-fr' : 'my-voice-en';
+  }
+};
+
+document.getElementById('v-file').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  pendingBlob = f;
+  const prev = document.getElementById('rec-preview');
+  prev.src = URL.createObjectURL(f);
+  prev.style.display = 'block';
+  document.getElementById('save-voice-btn').disabled = false;
+  document.getElementById('rec-status').textContent = 'Loaded file: ' + f.name;
+};
+
+document.getElementById('rec-btn').onclick = async () => {
+  const btn = document.getElementById('rec-btn');
+  const st = document.getElementById('rec-status');
+  if (mediaRec && mediaRec.state === 'recording') {
+    mediaRec.stop();
+    clearInterval(recTimer);
+    btn.textContent = 'Record Mic';
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recChunks = [];
+    recSec = 0;
+    mediaRec = new MediaRecorder(stream);
+    mediaRec.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+    mediaRec.onstop = () => {
+      stream.getTracks().forEach(t => t.stop());
+      pendingBlob = new Blob(recChunks, { type: mediaRec.mimeType || 'audio/webm' });
+      const prev = document.getElementById('rec-preview');
+      prev.src = URL.createObjectURL(pendingBlob);
+      prev.style.display = 'block';
+      document.getElementById('save-voice-btn').disabled = false;
+      st.textContent = 'Recorded ' + recSec + 's. Click Save Voice Clip.';
+    };
+    mediaRec.start();
+    btn.textContent = 'Stop Recording';
+    st.textContent = 'Recording: 0s (aim for 8-15s)...';
+    recTimer = setInterval(() => {
+      recSec += 1;
+      st.textContent = 'Recording: ' + recSec + 's (aim for 8-15s)...';
+      if (recSec >= 20 && mediaRec.state === 'recording') btn.click();
+    }, 1000);
+  } catch (err) {
+    st.textContent = 'Mic error: ' + err.message;
+  }
+};
+
+document.getElementById('save-voice-btn').onclick = async () => {
+  if (!pendingBlob) return;
+  const st = document.getElementById('save-status');
+  st.textContent = 'Converting & saving...';
+  const buf = await pendingBlob.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  const b64 = btoa(bin);
+  const body = {
+    name: document.getElementById('v-name').value.trim(),
+    language: document.getElementById('v-lang').value,
+    transcript: document.getElementById('v-text').value.trim(),
+    filename: pendingBlob.name || 'mic.webm',
+    audio_b64: b64,
+  };
+  const r = await fetch('/voices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json();
+  st.textContent = r.ok ? ('Saved ' + j.name + '!') : ('Error: ' + (j.error || r.status));
+  if (r.ok) refreshState();
+};
+
+document.getElementById('narrate-btn').onclick = async () => {
+  const btn = document.getElementById('narrate-btn');
+  const log = document.getElementById('narrate-log');
+  const linkBox = document.getElementById('narrate-link');
+  const text = document.getElementById('n-text').value.trim();
+  if (!text) return;
+  btn.disabled = true;
+  log.style.display = 'block';
+  log.textContent = 'Starting narration...\n';
+  linkBox.textContent = '';
+  try {
+    const r = await fetch('/narrate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text,
+        language: document.getElementById('n-lang').value,
+        engine: document.getElementById('n-engine').value || null,
+        voice: document.getElementById('n-voice').value || null,
+      }),
+    });
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.trim()) continue;
+        const ev = JSON.parse(ln);
+        if (ev.type === 'progress') {
+          log.textContent += ev.message + '\n';
+          log.scrollTop = log.scrollHeight;
+        } else if (ev.type === 'result') {
+          log.textContent += 'Done! Open player: ' + ev.player_url + '\n';
+          const a = el('a', { className: 'btn primary', href: ev.player_url, target: '_blank' }, 'Open Player & Download MP3');
+          linkBox.appendChild(a);
+        } else if (ev.type === 'error') {
+          log.textContent += 'ERROR: ' + ev.error + '\n';
+        }
+      }
+    }
+  } finally {
+    btn.disabled = false;
+    refreshState();
+  }
+};
+
+refreshState();
+</script>
+</body>
+</html>

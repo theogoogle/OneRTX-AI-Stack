@@ -1,0 +1,98 @@
+{
+  "edition_title": "The Family Table",
+  "location_label": "London",
+  "weather_source_label": "Met Office · London",
+  "met_office_geohash": "gcpvj0duq",
+  "timezone": "Europe/London",
+  "next_edition_time": "8:00 am",
+  "output_dir": "%USERPROFILE%\\Documents\\The-Family-Table",
+  "footer_readers": "Made for the family",
+  "recipients": [
+    "parent1@example.com",
+    "family@example.com"
+  ],
+  "children": [
+    {
+      "name": "Child One",
+      "dob": "2016-03-10",
+      "age_mode": "years_and_class",
+      "class_label": "Year 6"
+    },
+    {
+      "name": "Child Two",
+      "dob": "2025-01-15",
+      "age_mode": "months_under_36"
+    }
+  ],
+  "default_pickups": {
+    "1": "Parent A",
+    "2": "Parent B",
+    "3": "Parent A",
+    "4": "Parent B",
+    "5": "Parent A"
+  },
+  "calendars": {
+    "include": [
+      {
+        "id": "family@example.com",
+        "label": "Shared"
+      },
+      {
+        "id": "primary",
+        "label": "Personal"
+      }
+    ],
+    "exclude_title_regex": [],
+    "exclude_private_visibility": true
+  },
+  "gmail_queries": [
+    {
+      "name": "school_nursery",
+      "query": "from:(school.example.org OR nursery.example.org) -subject:Table newer_than:21d",
+      "max_results": 8,
+      "include_thread_replies": true
+    },
+    {
+      "name": "parties",
+      "query": "(birthday OR party OR invitation OR RSVP) -interview -talent -subject:Table newer_than:21d",
+      "max_results": 5,
+      "include_thread_replies": true
+    },
+    {
+      "name": "invoices_actions",
+      "query": "(invoice OR overdue OR consent OR questionnaire) -subject:Table -category:promotions newer_than:45d",
+      "max_results": 8,
+      "include_thread_replies": true
+    }
+  ],
+  "memory_sheet": {
+    "spreadsheet_id": "REPLACE_WITH_GOOGLE_SHEET_ID",
+    "history_range": "'Suggestions & History'!A1:E500",
+    "suggestions_range": "'Suggestions'!A1:C2000",
+    "append_range": "'Suggestions'!A1",
+    "repeat_cooldown_days": 14
+  },
+  "research": {
+    "local_area": "Central London",
+    "membership_name": "Heritage Pass",
+    "membership_region": "within 1 hour of Central London",
+    "banned_outing_terms": [
+      "blue plaque",
+      "blue plaques"
+    ]
+  },
+  "audit": {
+    "banned_kid_filler_terms": [],
+    "privacy_forbidden_regex": [
+      "\\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}\\b",
+      "\\b(?:\\+44|07\\d{3})[\\s-]?\\d{3}[\\s-]?\\d{3,4}\\b",
+      "\\bGB\\d{2}[A-Z]{4}\\d{14}\\b",
+      "\\bsort\\s*code\\s*:?\\s*\\d{2}-\\d{2}-\\d{2}\\b",
+      "\\b(?:job interview|recruiter|recruiting|talent acquisition|interview loop)\\b"
+    ]
+  },
+  "oauth": {
+    "client_secret_file": "google_client_secret.json",
+    "token_file": "google_token.json"
+  }
+}

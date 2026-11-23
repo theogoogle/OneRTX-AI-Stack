@@ -1,0 +1,75 @@
+{
+    "$schema":  "https://opencode.ai/config.json",
+    "model":  "local/local-think",
+    "small_model":  "local/local-background",
+    "enabled_providers":  [
+                              "local"
+                          ],
+    "share":  "disabled",
+    "provider":  {
+                     "local":  {
+                                   "npm":  "@ai-sdk/openai-compatible",
+                                   "name":  "Local AI (router)",
+                                   "options":  {
+                                                   "baseURL":  "http://127.0.0.1:4000/v1",
+                                                   "apiKey":  "local",
+                                                   "timeout":  false,
+                                                   "headerTimeout":  900000,
+                                                   "chunkTimeout":  600000
+                                               },
+                                   "models":  {
+                                                  "local-think":  {
+                                                                      "name":  "Qwen 3.8 27B + Pro 256K Hybrid, 8K think cap (local)",
+                                                                      "reasoning":  true,
+                                                                      "tool_call":  true,
+                                                                      "attachment":  false,
+                                                                      "limit":  {
+                                                                                    "context":  131072,
+                                                                                    "output":  32768
+                                                                                }
+                                                                  }
+                                              }
+                               }
+                 },
+    "permission":  {
+                       "edit":  "allow",
+                       "read":  "allow",
+                       "glob":  "allow",
+                       "grep":  "allow",
+                       "list":  "allow",
+                       "bash":  "ask",
+                       "webfetch":  "ask",
+                       "websearch":  "ask",
+                       "external_directory":  "deny",
+                       "doom_loop":  "ask",
+                       "scene3d_*":  "allow",
+                       "pptx_studio_*":  "allow",
+                       "skill":  "deny"
+                   },
+    "mcp":  {
+                "scene3d":  {
+                                "type":  "local",
+                                "command":  [
+                                                "%USERPROFILE%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+                                                "-I",
+                                                "%USERPROFILE%\\AI\\scene3d\\server.py"
+                                            ],
+                                "enabled":  true,
+                                "timeout":  1800000
+                            },
+                "pptx_studio":  {
+                                    "type":  "local",
+                                    "command":  [
+                                                    "%USERPROFILE%\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+                                                    "-I",
+                                                    "%USERPROFILE%\\AI\\pptx_studio\\server.py"
+                                                ],
+                                    "enabled":  true,
+                                    "timeout":  600000
+                                }
+            },
+    "instructions":  [
+                         "%USERPROFILE%/.config/opencode/AGENTS.md",
+                         "%USERPROFILE%/.config/opencode/shell-powershell.md"
+                     ]
+}

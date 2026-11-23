@@ -1,0 +1,23 @@
+﻿const { chromium } = require(process.argv[2]);
+(async () => {
+  const b = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  const errs = [];
+  p.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.type() + ': ' + m.text().slice(0, 300)); });
+  p.on('pageerror', e => errs.push('PAGEERROR: ' + e.message));
+  await p.goto('file:///' + process.argv[3].replace(/\\/g, '/'));
+  await p.waitForTimeout(1500);
+  await p.screenshot({ path: process.argv[4] + '-1-welcome.png' });
+  await p.fill('#name-input', 'the user');
+  await p.click('#start-btn');
+  await p.waitForTimeout(4000);
+  await p.screenshot({ path: process.argv[4] + '-2-campus.png' });
+  await p.keyboard.down('KeyW'); await p.waitForTimeout(1500); await p.keyboard.up('KeyW');
+  await p.waitForTimeout(500);
+  await p.screenshot({ path: process.argv[4] + '-3-walk.png' });
+  console.log('loading hidden:', await p.evaluate(() => document.getElementById('loading-screen').classList.contains('hidden')));
+  console.log('hud active:', await p.evaluate(() => document.getElementById('hud').classList.contains('active')));
+  console.log('canvas:', await p.evaluate(() => !!document.querySelector('canvas')));
+  console.log('errors:', errs.length ? errs.join('\n') : 'none');
+  await b.close();
+})();

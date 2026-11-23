@@ -1,0 +1,70 @@
+{
+  "preset": "",
+  "operation": {
+    "fields": [
+      {
+        "key": "llm.prediction.temperature",
+        "value": 0.6
+      },
+      {
+        "key": "llm.prediction.topPSampling",
+        "value": {
+          "checked": true,
+          "value": 0.95
+        }
+      },
+      {
+        "key": "llm.prediction.topKSampling",
+        "value": 20
+      },
+      {
+        "key": "llm.prediction.repeatPenalty",
+        "value": {
+          "checked": true,
+          "value": 1
+        }
+      },
+      {
+        "key": "llm.prediction.systemPrompt",
+        "value": "Use only the Three.js core ES module from\nhttps://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.0/three.module.min.js.\nDo not import addons or legacy examples/js paths;\nimplement any camera controls directly inside the HTML."
+      },
+      {
+        "key": "llm.prediction.minPSampling",
+        "value": {
+          "checked": true,
+          "value": 0
+        }
+      }
+    ]
+  },
+  "load": {
+    "fields": [
+      {
+        "key": "llm.load.llama.acceleration.offloadRatio",
+        "value": 1
+      },
+      {
+        "key": "llm.load.contextLength",
+        "value": 131072
+      },
+      {
+        "key": "llm.load.speculativeDecoding.draftMtp",
+        "value": false
+      },
+      {
+        "key": "llm.load.llama.kCacheQuantizationType",
+        "value": {
+          "checked": false,
+          "value": "f16"
+        }
+      },
+      {
+        "key": "llm.load.llama.vCacheQuantizationType",
+        "value": {
+          "checked": false,
+          "value": "f16"
+        }
+      }
+    ]
+  }
+}

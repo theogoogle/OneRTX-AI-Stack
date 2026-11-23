@@ -1,0 +1,7 @@
+# Model files live outside the ComfyUI code folder, so updating ComfyUI never touches them.
+ai_models:
+  base_path: %USERPROFILE%/AI/models
+  diffusion_models: diffusion_models
+  text_encoders: text_encoders
+  vae: vae
+  loras: loras

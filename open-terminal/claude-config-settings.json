@@ -1,0 +1,1 @@
+﻿{ "availableModels": ["default"], "permissions": { "allow": ["mcp__scene3d__make_3d_scene", "mcp__pptx_studio__search_slide_facts", "mcp__pptx_studio__generate_slide_visual", "mcp__pptx_studio__inspect_pptx_visually", "mcp__pptx_studio__publish_pptx"] } }

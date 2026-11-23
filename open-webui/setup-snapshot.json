@@ -1,0 +1,992 @@
+{
+  "schema_version": 1,
+  "notes": "Sanitized Open WebUI setup snapshot (models + non-secret Admin config). Restore on a fresh install: stop Open WebUI, run `python -I setup_backup.py restore`, start Open WebUI.",
+  "models": [
+    {
+      "id": "3d",
+      "base_model_id": null,
+      "name": "3D",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "auto",
+      "base_model_id": null,
+      "name": "💡 Smart",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Automatically routes to the best model for your question, code, 3D, or browser task",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false,
+        "toolIds": [
+          "generate_slides",
+          "google_workspace",
+          "youtube_transcript",
+          "export_document",
+          "deep_research",
+          "smart_visuals",
+          "market_finance"
+        ]
+      },
+      "is_active": 1
+    },
+    {
+      "id": "background",
+      "base_model_id": null,
+      "name": "Background",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "code",
+      "base_model_id": null,
+      "name": "Coding (fast)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true,
+        "toolIds": [
+          "generate_slides",
+          "google_workspace",
+          "youtube_transcript",
+          "export_document",
+          "deep_research",
+          "smart_visuals",
+          "market_finance"
+        ]
+      },
+      "is_active": 1
+    },
+    {
+      "id": "deep",
+      "base_model_id": null,
+      "name": "🧠 Pro",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Deep reasoning, analysis & long documents up to 256K tokens (Qwen 3.6 35B)",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false,
+        "toolIds": [
+          "generate_slides",
+          "google_workspace",
+          "youtube_transcript",
+          "export_document",
+          "deep_research",
+          "smart_visuals",
+          "market_finance"
+        ]
+      },
+      "is_active": 1
+    },
+    {
+      "id": "fast",
+      "base_model_id": null,
+      "name": "⚡⚡ Flash (GPU)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Fast everyday answers, writing, translation & image understanding (Gemma 4 12B, 192K)",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false,
+        "toolIds": [
+          "generate_slides",
+          "google_workspace",
+          "youtube_transcript",
+          "export_document",
+          "deep_research",
+          "smart_visuals",
+          "market_finance"
+        ]
+      },
+      "is_active": 1
+    },
+    {
+      "id": "flash",
+      "base_model_id": null,
+      "name": "⚡ Flash (CPU)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Instant CPU answers even while the GPU is busy (Qwen 3.5 4B, 64K)",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false
+      },
+      "is_active": 1
+    },
+    {
+      "id": "gemma-4-12b-it-qat",
+      "base_model_id": null,
+      "name": "Gemma 4 12B",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "lfm3-1.7b",
+      "base_model_id": null,
+      "name": "LFM3 1.7B (CPU)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-3d",
+      "base_model_id": null,
+      "name": "local-3d",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-auto",
+      "base_model_id": null,
+      "name": "local-auto",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-background",
+      "base_model_id": null,
+      "name": "local-background",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-code",
+      "base_model_id": null,
+      "name": "local-code",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-deep",
+      "base_model_id": null,
+      "name": "local-deep",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-fast",
+      "base_model_id": null,
+      "name": "local-fast",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-flash",
+      "base_model_id": null,
+      "name": "local-flash",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-screen",
+      "base_model_id": null,
+      "name": "local-screen",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-think",
+      "base_model_id": null,
+      "name": "local-think",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "local-voice",
+      "base_model_id": null,
+      "name": "local-voice",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Hidden alias for voice",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "northcua-nano",
+      "base_model_id": null,
+      "name": "Northcua Nano 9B",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen-image-2.1",
+      "base_model_id": null,
+      "name": "Qwen Image 2.1",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.5-4b",
+      "base_model_id": null,
+      "name": "Qwen 3.5 4B (CPU)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.5-4b-3d-coder",
+      "base_model_id": null,
+      "name": "🧊 3D Scene Generator",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "One-shot Three.js 3D worlds & scenes in a single HTML file (Qwen 3.5 3D Coder)",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.5-4b-3d-coder@q4_k_m",
+      "base_model_id": null,
+      "name": "Qwen 3.5 3D Coder (Q4_K_M)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.5-4b-3d-coder@q8_0",
+      "base_model_id": null,
+      "name": "Qwen 3.5 3D Coder (Q8_0)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "base_model_id": null,
+      "name": "Qwen 3.6 35B",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "qwen3.8-27b-gsq-rco",
+      "base_model_id": null,
+      "name": "Qwen 3.8 27B (IQ3_S)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "screen",
+      "base_model_id": null,
+      "name": "🖥️ Computer use",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "text-embedding-nomic-embed-text-v1.5",
+      "base_model_id": null,
+      "name": "Nomic Embed Text v1.5",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": null,
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": true
+      },
+      "is_active": 1
+    },
+    {
+      "id": "think",
+      "base_model_id": null,
+      "name": "💻 Coding / Planning",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Writes complete code & architecture plans directly in chat (Qwen 3.8 27B, 64K)",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false,
+        "toolIds": [
+          "generate_slides",
+          "google_workspace",
+          "youtube_transcript",
+          "export_document",
+          "deep_research",
+          "smart_visuals",
+          "market_finance"
+        ]
+      },
+      "is_active": 1
+    },
+    {
+      "id": "voice",
+      "base_model_id": null,
+      "name": "🎙️ Story Voice (Podcast)",
+      "params": {},
+      "meta": {
+        "profile_image_url": null,
+        "background_image_url": null,
+        "description": "Clones your voice (Qwen3-TTS 1.7B + Chatterbox) to read EN/FR stories as downloadable MP3s",
+        "i18n": null,
+        "capabilities": null,
+        "knowledge": null,
+        "subagents": null,
+        "voice": null,
+        "voice_avatar": null,
+        "hidden": false
+      },
+      "is_active": 1
+    }
+  ],
+  "config": {
+    "audio.stt.allowed_extensions": [
+      "mp3",
+      "wav",
+      "m4a",
+      "webm",
+      "ogg",
+      "flac",
+      "mp4",
+      "mpga",
+      "mpeg"
+    ],
+    "audio.stt.azure.api_key": "",
+    "audio.stt.azure.base_url": "",
+    "audio.stt.azure.locales": "",
+    "audio.stt.azure.max_speakers": "",
+    "audio.stt.azure.region": "",
+    "audio.stt.deepgram.api_key": "",
+    "audio.stt.engine": "",
+    "audio.stt.mistral.api_base_url": "https://api.mistral.ai/v1",
+    "audio.stt.mistral.api_key": "",
+    "audio.stt.mistral.use_chat_completions": false,
+    "audio.stt.model": "",
+    "audio.stt.openai.api_base_url": "https://api.openai.com/v1",
+    "audio.stt.openai.api_key": "",
+    "audio.stt.openai.api_request_format": "multipart",
+    "audio.stt.supported_content_types": [],
+    "audio.stt.whisper_model": "base",
+    "audio.tts.api_key": "",
+    "audio.tts.azure.speech_base_url": "",
+    "audio.tts.azure.speech_output_format": "audio-24khz-160kbitrate-mono-mp3",
+    "audio.tts.azure.speech_region": "",
+    "audio.tts.engine": "openai",
+    "audio.tts.mistral.api_base_url": "https://api.mistral.ai/v1",
+    "audio.tts.mistral.api_key": "",
+    "audio.tts.model": "tts-1",
+    "audio.tts.openai.api_base_url": "http://127.0.0.1:4000/v1",
+    "audio.tts.openai.api_key": "local",
+    "audio.tts.openai.params": {},
+    "audio.tts.realtime.prompt_template": null,
+    "audio.tts.split_on": "punctuation",
+    "audio.tts.voice": "default",
+    "chat.context_compaction.enable": false,
+    "chat.context_compaction.model": "",
+    "chat.context_compaction.prompt_template": "",
+    "chat.context_compaction.retention_percentage": 40,
+    "chat.context_compaction.token_cap": null,
+    "chat.context_compaction.token_threshold": 80000,
+    "chat.tool_call_labels.enable": false,
+    "chat.tool_permissions.enable": false,
+    "direct.enable": false,
+    "direct.integrations.enable": false,
+    "evaluation.arena.enable": false,
+    "image_generation.automatic1111.api_auth": "",
+    "image_generation.automatic1111.api_params": {},
+    "image_generation.automatic1111.base_url": "",
+    "image_generation.comfyui.api_key": "",
+    "image_generation.comfyui.base_url": "",
+    "image_generation.comfyui.nodes": [],
+    "image_generation.comfyui.workflow": "\n{\n  \"3\": {\n    \"inputs\": {\n      \"seed\": 0,\n      \"steps\": 20,\n      \"cfg\": 8,\n      \"sampler_name\": \"euler\",\n      \"scheduler\": \"normal\",\n      \"denoise\": 1,\n      \"model\": [\n        \"4\",\n        0\n      ],\n      \"positive\": [\n        \"6\",\n        0\n      ],\n      \"negative\": [\n        \"7\",\n        0\n      ],\n      \"latent_image\": [\n        \"5\",\n        0\n      ]\n    },\n    \"class_type\": \"KSampler\",\n    \"_meta\": {\n      \"title\": \"KSampler\"\n    }\n  },\n  \"4\": {\n    \"inputs\": {\n      \"ckpt_name\": \"model.safetensors\"\n    },\n    \"class_type\": \"CheckpointLoaderSimple\",\n    \"_meta\": {\n      \"title\": \"Load Checkpoint\"\n    }\n  },\n  \"5\": {\n    \"inputs\": {\n      \"width\": 512,\n      \"height\": 512,\n      \"batch_size\": 1\n    },\n    \"class_type\": \"EmptyLatentImage\",\n    \"_meta\": {\n      \"title\": \"Empty Latent Image\"\n    }\n  },\n  \"6\": {\n    \"inputs\": {\n      \"text\": \"Prompt\",\n      \"clip\": [\n        \"4\",\n        1\n      ]\n    },\n    \"class_type\": \"CLIPTextEncode\",\n    \"_meta\": {\n      \"title\": \"CLIP Text Encode (Prompt)\"\n    }\n  },\n  \"7\": {\n    \"inputs\": {\n      \"text\": \"\",\n      \"clip\": [\n        \"4\",\n        1\n      ]\n    },\n    \"class_type\": \"CLIPTextEncode\",\n    \"_meta\": {\n      \"title\": \"CLIP Text Encode (Prompt)\"\n    }\n  },\n  \"8\": {\n    \"inputs\": {\n      \"samples\": [\n        \"3\",\n        0\n      ],\n      \"vae\": [\n        \"4\",\n        2\n      ]\n    },\n    \"class_type\": \"VAEDecode\",\n    \"_meta\": {\n      \"title\": \"VAE Decode\"\n    }\n  },\n  \"9\": {\n    \"inputs\": {\n      \"filename_prefix\": \"ComfyUI\",\n      \"images\": [\n        \"8\",\n        0\n      ]\n    },\n    \"class_type\": \"SaveImage\",\n    \"_meta\": {\n      \"title\": \"Save Image\"\n    }\n  }\n}\n",
+    "image_generation.default_model": "42a75ac3-bcf9-4eda-b535-8f26ab00bc92:qwen-image-2.1",
+    "image_generation.enable": true,
+    "image_generation.engine": "openai",
+    "image_generation.gemini.api_base_url": "",
+    "image_generation.gemini.api_key": "",
+    "image_generation.gemini.endpoint_method": "",
+    "image_generation.model": "qwen-image-2.1",
+    "image_generation.openai.api_base_url": "http://127.0.0.1:4000/v1",
+    "image_generation.openai.api_key": "local",
+    "image_generation.openai.api_version": "",
+    "image_generation.openai.params": {},
+    "image_generation.prompt.enable": false,
+    "image_generation.size": "1024x1024",
+    "image_generation.steps": 50,
+    "images.connections": [
+      {
+        "id": "42a75ac3-bcf9-4eda-b535-8f26ab00bc92",
+        "name": "OpenAI",
+        "type": "openai",
+        "url": "http://127.0.0.1:4000/v1",
+        "key": "local",
+        "config": {
+          "enable": true,
+          "capabilities": {
+            "image_generation": true,
+            "image_edit": true
+          },
+          "model_ids": [
+            "qwen-image-2.1"
+          ],
+          "access_grants": [
+            {
+              "principal_type": "user",
+              "principal_id": "*",
+              "permission": "read"
+            }
+          ],
+          "auth_type": "bearer",
+          "headers": {},
+          "size": "1024x1024",
+          "edit_size": "",
+          "steps": 50,
+          "api_version": "",
+          "params": {},
+          "endpoint_method": "",
+          "workflow": "",
+          "nodes": [],
+          "edit_workflow": "",
+          "edit_nodes": []
+        }
+      }
+    ],
+    "images.edit.comfyui.api_key": "",
+    "images.edit.comfyui.base_url": "",
+    "images.edit.comfyui.nodes": [],
+    "images.edit.comfyui.workflow": "",
+    "images.edit.default_model": "42a75ac3-bcf9-4eda-b535-8f26ab00bc92:qwen-image-2.1",
+    "images.edit.enable": true,
+    "images.edit.engine": "openai",
+    "images.edit.gemini.api_base_url": "",
+    "images.edit.gemini.api_key": "",
+    "images.edit.model": "qwen-image-2.1",
+    "images.edit.openai.api_base_url": "http://127.0.0.1:4000/v1",
+    "images.edit.openai.api_key": "local",
+    "images.edit.openai.api_version": "",
+    "images.edit.size": "",
+    "models.base_models_cache": false,
+    "models.default_metadata": {
+      "capabilities": {
+        "file_context": true
+      }
+    },
+    "models.default_params": {},
+    "ollama.api_configs": {},
+    "ollama.base_urls": [
+      "http://localhost:11434"
+    ],
+    "ollama.enable": false,
+    "openai.api_base_urls": [
+      "http://127.0.0.1:4000/v1"
+    ],
+    "openai.api_configs": {},
+    "openai.api_keys": [
+      "local"
+    ],
+    "openai.enable": true,
+    "task.autocomplete.enable": false,
+    "task.autocomplete.input_max_length": -1,
+    "task.autocomplete.prompt_template": "",
+    "task.follow_up.enable": true,
+    "task.follow_up.prompt_template": "### Task: Predict next user messages\n<chat_history>\n{{MESSAGES:END:4|middletruncate:900}}\n</chat_history>\n\nBased on the chat history above, write 3 short, specific follow-up prompts that the HUMAN USER might send next to the AI assistant.\n\nCRITICAL RULES:\n1. LANGUAGE: Write in the EXACT SAME LANGUAGE as the last USER message (if the user wrote in French, ALL follow_ups MUST be in French; if English, in English).\n2. PERSPECTIVE: Write strictly from the USER's point of view asking or instructing the AI. NEVER write as the assistant: NEVER say \"Got it\", \"Do you want...\", \"Would you like...\", \"Anything else...\", \"Let me know...\", \"Voulez-vous...\", or offer help to the user.\n3. Do not repeat questions already answered in <chat_history>. Keep each item concise (< 100 characters).\n4. Examples:\n   - English GOOD: {\"follow_ups\": [\"What are the populations of Indianapolis and Cheyenne?\", \"Why was Cheyenne chosen as Wyoming's capital?\", \"Compare the climate of both cities\"]}\n   - Français GOOD: {\"follow_ups\": [\"Quel budget prévoir pour une semaine sur place ?\", \"Quels quartiers privilégier pour loger ?\", \"Faut-il réserver les visites à l'avance ?\"]}\n   - BAD (forbidden assistant voice): {\"follow_ups\": [\"Do you want their populations?\", \"Let me know if you need more details\"]}\n\nRespond ONLY with a valid JSON object:\n{\"follow_ups\": [\"...\", \"...\", \"...\"]}",
+    "task.image.prompt_template": "",
+    "task.model.default": "",
+    "task.model.external": "background",
+    "task.model.params": {},
+    "task.query.prompt_template": "",
+    "task.query.retrieval.enable": true,
+    "task.query.search.enable": true,
+    "task.tags.enable": true,
+    "task.tags.prompt_template": "",
+    "task.title.enable": true,
+    "task.title.prompt_template": "",
+    "task.tools.prompt_template": "",
+    "task.voice.prompt.enable": true,
+    "task.voice.prompt_template": "",
+    "terminal_server.connections": [
+      {
+        "id": "4c246ced-35dc-4bc6-b2da-42164deda91a",
+        "name": "🛠️ Coding Agents",
+        "enabled": true,
+        "url": "http://127.0.0.1:8940",
+        "path": "/openapi.json",
+        "key": "__FROM_OPEN_TERMINAL_SECRET_FILE__",
+        "auth_type": "bearer",
+        "forward_cookies": false,
+        "config": {
+          "access_grants": [],
+          "working_directory_context": true,
+          "user_shell_tools": "auto"
+        },
+        "server_type": null,
+        "policy_id": null
+      }
+    ],
+    "tool_server.connections": [
+      {
+        "url": "http://127.0.0.1:8931/mcp",
+        "path": "",
+        "type": "mcp",
+        "auth_type": "none",
+        "forward_cookies": false,
+        "headers": null,
+        "key": "",
+        "config": {
+          "enable": true,
+          "function_name_filter_list": "!browser_run_code_unsafe,!browser_file_upload,!browser_close"
+        },
+        "info": {
+          "id": "browser",
+          "name": "Browser Use",
+          "description": "Controls a Chrome window on the PC that you can watch live (own profile, no logins)."
+        }
+      },
+      {
+        "url": "http://127.0.0.1:8932/mcp",
+        "path": "",
+        "type": "mcp",
+        "auth_type": "none",
+        "forward_cookies": false,
+        "headers": null,
+        "key": "",
+        "config": {
+          "enable": true,
+          "function_name_filter_list": "!browser_run_code_unsafe,!browser_file_upload,!browser_close"
+        },
+        "info": {
+          "id": "browser_headless",
+          "name": "Browser Use (headless)",
+          "description": "Controls an invisible Chrome on the PC (own profile, no logins)."
+        }
+      },
+      {
+        "url": "http://127.0.0.1:8933/mcp",
+        "path": "",
+        "type": "mcp",
+        "auth_type": "none",
+        "forward_cookies": false,
+        "headers": null,
+        "key": "",
+        "config": {
+          "enable": true,
+          "function_name_filter_list": "desktop_use"
+        },
+        "info": {
+          "id": "desktop_use",
+          "name": "Desktop Use",
+          "description": "Controls the Windows desktop on the PC with NorthCUA (screenshots, mouse clicks, keyboard shortcuts, typing)."
+        }
+      }
+    ],
+    "ui.banners": [],
+    "ui.default_interface_settings": {},
+    "ui.default_locale": "",
+    "ui.default_models": "auto",
+    "ui.default_pinned_models": null,
+    "ui.enable_community_sharing": false,
+    "ui.enable_message_rating": true,
+    "ui.enable_signup": false,
+    "ui.model_order_list": [
+      "auto",
+      "fast",
+      "flash",
+      "deep",
+      "think",
+      "voice",
+      "qwen3.5-4b-3d-coder",
+      "gemma-4-12b-it-qat",
+      "lfm3-1.7b",
+      "qwen3.5-4b",
+      "qwen3.6-35b-a3b",
+      "qwen3.8-27b-gsq-rco"
+    ],
+    "ui.prompt_suggestions": null,
+    "ui.prompt_suggestions_i18n": {},
+    "user.permissions": {
+      "workspace": {
+        "models": false,
+        "knowledge": false,
+        "prompts": false,
+        "tools": false,
+        "skills": false,
+        "models_import": false,
+        "models_export": false,
+        "models_hidden": false,
+        "prompts_import": false,
+        "prompts_export": false,
+        "tools_import": false,
+        "tools_export": false,
+        "skills_import": false,
+        "skills_export": false
+      },
+      "sharing": {
+        "models": false,
+        "public_models": false,
+        "knowledge": false,
+        "public_knowledge": false,
+        "prompts": false,
+        "public_prompts": false,
+        "tools": false,
+        "public_tools": false,
+        "skills": false,
+        "public_skills": false,
+        "notes": false,
+        "public_notes": false,
+        "folders": false,
+        "public_chats": false,
+        "open_chats": false,
+        "public_calendars": false
+      },
+      "access_grants": {
+        "allow_users": true,
+        "allow_groups": true
+      },
+      "chat": {
+        "controls": true,
+        "valves": true,
+        "system_prompt": true,
+        "params": true,
+        "file_upload": true,
+        "web_upload": true,
+        "delete": true,
+        "delete_message": true,
+        "continue_response": true,
+        "regenerate_response": true,
+        "rate_response": true,
+        "edit": true,
+        "share": false,
+        "export": true,
+        "import": true,
+        "stt": true,
+        "tts": true,
+        "call": true,
+        "multiple_models": true,
+        "temporary": true,
+        "side_chat": false,
+        "temporary_enforced": false
+      },
+      "features": {
+        "api_keys": false,
+        "notes": true,
+        "folders": true,
+        "channels": true,
+        "encrypted_channels": false,
+        "direct_tool_servers": false,
+        "web_search": true,
+        "image_generation": true,
+        "code_interpreter": true,
+        "memories": true,
+        "automations": false,
+        "calendar": true,
+        "webhooks": false
+      },
+      "settings": {
+        "interface": true
+      }
+    },
+    "web.search.enable": true,
+    "web.search.engine": "external",
+    "web.search.external_web_search_api_key": "local",
+    "web.search.external_web_search_url": "http://127.0.0.1:4000/v1/web/search",
+    "web.search.result_count": 5
+  }
+}
