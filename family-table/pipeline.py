@@ -167,6 +167,112 @@ def _router_post_json(path: str, payload: dict[str, Any], timeout: int = 420) ->
         conn.close()
 
 
+def _router_post_sse_chat(
+    payload: dict[str, Any],
+    *,
+    first_token_timeout_s: int = 300,
+    idle_timeout_s: int = 120,
+    total_timeout_s: int = 900,
+) -> tuple[str, dict[str, Any]]:
+    """POST /v1/chat/completions with stream=True, enforcing first-token, per-chunk idle, and overall caps."""
+    req_payload = dict(payload)
+    req_payload["stream"] = True
+    body = json.dumps(req_payload, ensure_ascii=False).encode("utf-8")
+    started = time.monotonic()
+    deadline = started + max(30, int(total_timeout_s))
+    conn = http.client.HTTPConnection(
+        ROUTER_HOST,
+        ROUTER_PORT,
+        timeout=min(first_token_timeout_s, total_timeout_s),
+    )
+    try:
+        conn.request(
+            "POST",
+            "/v1/chat/completions",
+            body=body,
+            headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        )
+        resp = conn.getresponse()
+        if resp.status >= 400:
+            raw = resp.read()
+            raise RuntimeError(f"Router /v1/chat/completions HTTP {resp.status}: {raw.decode('utf-8', 'ignore')[:400]}")
+
+        ctype = (resp.getheader("Content-Type") or "").lower()
+        if "text/event-stream" not in ctype:
+            raw = resp.read()
+            data = json.loads(raw.decode("utf-8"))
+            content = (((data.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+            return content, {
+                "elapsed_s": round(time.monotonic() - started, 1),
+                "content_chars": len(content),
+                "reasoning_chars": 0,
+                "streamed": False,
+            }
+
+        buf = b""
+        content_parts: list[str] = []
+        reasoning_chars = 0
+        got_token = False
+        saw_done = False
+
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(
+                    f"Streaming response exceeded overall cap ({total_timeout_s}s; "
+                    f"reasoning={reasoning_chars} chars, content={sum(len(p) for p in content_parts)} chars)"
+                )
+            step_timeout = idle_timeout_s if got_token else first_token_timeout_s
+            if conn.sock is not None:
+                conn.sock.settimeout(min(float(step_timeout), max(1.0, remaining)))
+            chunk = resp.read1(16384)
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                raw_line, buf = buf.split(b"\n", 1)
+                line = raw_line.strip()
+                if not line or line.startswith(b":") or not line.startswith(b"data:"):
+                    continue
+                data_s = line[5:].strip()
+                if data_s == b"[DONE]":
+                    saw_done = True
+                    break
+                try:
+                    ev = json.loads(data_s.decode("utf-8"))
+                except (ValueError, UnicodeDecodeError):
+                    continue
+                if isinstance(ev, dict) and ev.get("error"):
+                    err = ev["error"]
+                    msg = err.get("message") if isinstance(err, dict) else str(err)
+                    raise RuntimeError(f"Router stream error: {msg}")
+                choices = ev.get("choices") if isinstance(ev, dict) else None
+                if not choices:
+                    continue
+                delta = (choices[0] or {}).get("delta") or {}
+                rc = delta.get("reasoning_content")
+                if rc:
+                    got_token = True
+                    reasoning_chars += len(rc)
+                ct = delta.get("content")
+                if ct:
+                    got_token = True
+                    content_parts.append(ct)
+            if saw_done:
+                break
+
+        content = "".join(content_parts)
+        return content, {
+            "elapsed_s": round(time.monotonic() - started, 1),
+            "content_chars": len(content),
+            "reasoning_chars": reasoning_chars,
+            "streamed": True,
+            "saw_done": saw_done,
+        }
+    finally:
+        conn.close()
+
+
 def ensure_stack_ready(wait_s: int = 180, wait_idle_s: int = 300, kick_start: bool = True) -> dict[str, Any]:
     """Ensure local router (:4000) is up and idle before starting GPU inference."""
     kicked = False
@@ -249,12 +355,34 @@ def _strip_thinking_and_extract_json(raw: str) -> dict[str, Any]:
     return json.loads(text)
 
 
+def _is_retryable_llm_error(exc: Exception) -> bool:
+    if isinstance(exc, (TimeoutError, ConnectionError, http.client.HTTPException, OSError)):
+        return True
+    msg = str(exc).lower()
+    return any(
+        tok in msg
+        for tok in (
+            "timed out",
+            "timeout",
+            "http 500",
+            "http 502",
+            "http 503",
+            "model does not exist",
+            "model_stalled",
+            "stopped responding",
+            "empty response",
+            "remote end closed",
+            "connection reset",
+        )
+    )
+
+
 def _ask_pro_json(system_prompt: str, user_prompt: str, temperature: float = 0.45, max_tokens: int = 12000) -> dict[str, Any]:
     payload = {
         "model": "deep",
         "temperature": temperature,
         "max_tokens": max_tokens,
-        "stream": False,
+        "stream": True,
         "_internal_family_table": True,
         "messages": [
             {"role": "system", "content": system_prompt},
@@ -264,16 +392,25 @@ def _ask_pro_json(system_prompt: str, user_prompt: str, temperature: float = 0.4
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            resp = _router_post_json("/v1/chat/completions", payload, timeout=480)
-            content = (((resp.get("choices") or [{}])[0]).get("message") or {}).get("content") or ""
+            content, stats = _router_post_sse_chat(
+                payload,
+                first_token_timeout_s=300,
+                idle_timeout_s=120,
+                total_timeout_s=900,
+            )
+            _log(
+                f"Pro call finished in {stats['elapsed_s']}s "
+                f"(streamed={stats['streamed']}, reasoning={stats['reasoning_chars']} chars, "
+                f"content={stats['content_chars']} chars)"
+            )
             if not content.strip():
                 raise RuntimeError("Local Pro model returned empty response.")
             return _strip_thinking_and_extract_json(content)
         except Exception as e:
             last_err = e
-            if attempt == 0 and any(code in str(e) for code in ("HTTP 500", "HTTP 502", "HTTP 503", "Model does not exist")):
-                _log(f"Transient router/LM Studio error on Pro call ({e}); retrying in 8s...")
-                time.sleep(8)
+            if attempt == 0 and _is_retryable_llm_error(e):
+                _log(f"Transient router/LM Studio error on Pro call ({type(e).__name__}: {e}); retrying in 10s...")
+                time.sleep(10)
                 continue
             raise
     assert last_err is not None
@@ -306,7 +443,7 @@ def run_vision_qa(png_path: Path, render_info: dict[str, Any]) -> dict[str, Any]
         "model": "fast",
         "temperature": 0.1,
         "max_tokens": 500,
-        "stream": False,
+        "stream": True,
         "_internal_family_table": True,
         "messages": [
             {
@@ -318,9 +455,17 @@ def run_vision_qa(png_path: Path, render_info: dict[str, Any]) -> dict[str, Any]
             }
         ],
     }
-    resp = _router_post_json("/v1/chat/completions", payload, timeout=180)
-    critique = ((((resp.get("choices") or [{}])[0]).get("message") or {}).get("content") or "").strip()
-    critique = re.sub(r"(?is)<think>.*?</think>", "", critique).strip()
+    critique, stats = _router_post_sse_chat(
+        payload,
+        first_token_timeout_s=240,
+        idle_timeout_s=90,
+        total_timeout_s=360,
+    )
+    _log(
+        f"Vision QA finished in {stats['elapsed_s']}s "
+        f"(reasoning={stats['reasoning_chars']} chars, content={stats['content_chars']} chars)"
+    )
+    critique = re.sub(r"(?is)<think>.*?</think>", "", (critique or "").strip()).strip()
     verdict = "FIX" if re.search(r"(?im)^VERDICT\s*:\s*FIX\b", critique) else "PASS"
     return {"verdict": verdict, "critique": critique}
 

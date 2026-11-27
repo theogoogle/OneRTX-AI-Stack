@@ -412,12 +412,96 @@ def test_pipeline_aborts_on_unresolved_privacy_violation():
     print("  [PASS] run_pipeline aborted delivery when privacy violation persisted across LLM repair pass")
 
 
+def test_streaming_and_timeout_retry():
+    # 1. Verify SSE reassembly collects content separately from reasoning and tightens socket timeout after first token
+    sse_chunks = [
+        b'data: {"choices":[{"delta":{"role":"assistant","content":""}}]}\n\n',
+        b'data: {"choices":[{"delta":{"reasoning_content":"planning..."}}]}\n\n',
+        b'data: {"choices":[{"delta":{"content":"{\\"ok\\": "}}]}\n\n',
+        b'data: {"choices":[{"delta":{"content":"true}"}}]}\n\n',
+        b'data: [DONE]\n\n',
+        b"",
+    ]
+
+    class _FakeSock:
+        def __init__(self):
+            self.timeouts = []
+
+        def settimeout(self, t):
+            self.timeouts.append(t)
+
+    class _FakeResp:
+        status = 200
+
+        def __init__(self, chunks):
+            self._it = iter(chunks)
+
+        def getheader(self, name, default=None):
+            return "text/event-stream; charset=utf-8" if name.lower() == "content-type" else default
+
+        def read1(self, _n):
+            return next(self._it, b"")
+
+    class _FakeConn:
+        def __init__(self, chunks):
+            self.sock = _FakeSock()
+            self._resp = _FakeResp(chunks)
+            self.closed = False
+
+        def request(self, *_a, **_kw):
+            pass
+
+        def getresponse(self):
+            return self._resp
+
+        def close(self):
+            self.closed = True
+
+    fake_conn = _FakeConn(sse_chunks)
+    with mock.patch("http.client.HTTPConnection", return_value=fake_conn):
+        content, stats = ft._router_post_sse_chat(
+            {"model": "deep", "messages": [{"role": "user", "content": "hi"}]},
+            first_token_timeout_s=300,
+            idle_timeout_s=120,
+            total_timeout_s=900,
+        )
+    assert json.loads(content) == {"ok": True}, content
+    assert stats["streamed"] is True and stats["saw_done"] is True
+    assert stats["reasoning_chars"] == len("planning...")
+    assert fake_conn.closed is True
+    assert fake_conn.sock.timeouts[0] == 300.0 and any(t == 120.0 for t in fake_conn.sock.timeouts[1:]), fake_conn.sock.timeouts
+
+    # 2. Verify _ask_pro_json retries once on TimeoutError and succeeds on attempt 2
+    calls = {"n": 0}
+
+    def _flaky_sse(*_a, **_kw):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise TimeoutError("timed out")
+        return '{"lede": "Recovered after retry"}', {
+            "elapsed_s": 1.2,
+            "content_chars": 32,
+            "reasoning_chars": 100,
+            "streamed": True,
+            "saw_done": True,
+        }
+
+    with mock.patch.object(ft, "_router_post_sse_chat", side_effect=_flaky_sse), \
+            mock.patch.object(ft.time, "sleep"):
+        out = ft._ask_pro_json("sys", "usr")
+    assert out == {"lede": "Recovered after retry"} and calls["n"] == 2
+    assert ft._is_retryable_llm_error(TimeoutError("timed out"))
+    assert ft._is_retryable_llm_error(RuntimeError("Router stream error: model_stalled"))
+    print("  [PASS] streaming SSE client (first-token -> idle timeout) + TimeoutError automatic retry")
+
+
 def main() -> int:
     tests = [
         test_metoffice_script,
         test_lock_and_clean_audit,
         test_audit_catches_all_violations,
         test_pipeline_aborts_on_unresolved_privacy_violation,
+        test_streaming_and_timeout_retry,
         test_broadsheet_playwright_render_and_mime,
         test_router_family_table_wiring,
         test_google_workspace_routing,
